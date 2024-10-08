@@ -107,15 +107,27 @@ ee.on('world.wikis', (result) => {
     });
 });
 
-ee.on('world.wikis.200', ({ wiki, response }) => {
-    // If we got a 200, then it is online, so P13 can be online Q54
+ee.on('world.wikis.200', async ({ wiki, response }) => {
+    const url = world.getEntities({ids: [ wiki.item ]})
+    const { entities } = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
+    const simpleClaims = simplifyClaims(entities[wiki.item].claims)
+    const responseText = await response.text()
+    const urlIsMediaWiki = responseText.includes('content="MediaWiki')
+
+    if (!urlIsMediaWiki) {
+        console.log(`❌ The URL ${wiki.site} is not a MediaWiki, aborting for now...`)
+        return
+    }
+
+    // If we got a 200 and its MediaWiki, and the item does not have a P13 claim, or the P13 claim is not Q54, then ensure P13 -> Q54
+    if (!simpleClaims.P13 || ( simpleClaims.P13.length <= 1 && simpleClaims.P13[0] !== 'Q54' ) ) {
+        console.log(`✅ The URL ${wiki.site} is online, so P13 can be Q54`)
+        ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P13', value: 'Q54'}, requestConfig: { summary: `Add [[Property:P13]] claim for [[Item:Q54]] based on the fact it respondes with a 200 of MediaWiki` } })
+    }
 
     // If the domain ends in .wikibase.cloud, then ensure P2 (Host) -> Q8 (Wikibase.cloud) on the world item
     if (wiki.site.endsWith('.wikibase.cloud')) {
         queue.add(async () => {
-            const url = world.getEntities({ids: [ wiki.item ]})
-            const { entities } = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
-            const simpleClaims = simplifyClaims(entities[wiki.item].claims)
             if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q8') {
                 console.log(`🖊️ Adding P2 (Host) claim to ${wiki.item} for ${wiki.site}`)
                 ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P2', value: 'Q8'}, requestConfig: { summary: `Add [[Property:P2]] claim for [[Item:Q8]] based on [[Property:P1]] of ${wiki.site}` } })
@@ -131,11 +143,6 @@ ee.on('world.wikis.200', ({ wiki, response }) => {
                 const newResponse = await fetchc(shorterUrl, { headers: HEADERS });
                 if (response.url === newResponse.url) {
                     console.log(`✅ The URL ${wiki.site} can be shortened to ${shorterUrl}, as they both go to ${response.url}`);
-
-                    // Fetch the item from the world wikibase
-                    const url = world.getEntities({ids: [ wiki.item ]})
-                    const { entities } = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
-                    const simpleClaims = simplifyClaims(entities[wiki.item].claims)
                     // Skip if there is more than 1 P1 claim
                     if (simpleClaims.P1.length > 1) {
                         console.log(`❌ The item ${wiki.item} has more than 1 P1 claim`)
