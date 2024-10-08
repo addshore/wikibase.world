@@ -110,16 +110,32 @@ ee.on('world.wikis', (result) => {
 ee.on('world.wikis.200', async ({ wiki, response }) => {
     const url = world.getEntities({ids: [ wiki.item ]})
     const { entities } = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
-    const simpleClaims = simplifyClaims(entities[wiki.item].claims)
+    const entity = entities[wiki.item]
+    const simpleClaims = simplifyClaims(entity.claims)
     const responseText = await response.text()
     const urlIsMediaWiki = responseText.includes('content="MediaWiki')
+    // We should be able to parse an action API from the page too
+    // It is like <link rel="EditURI" type="application/rsd+xml" href="https://wikibase.world/w/api.php?action=rsd"/>
+    // And we want https://wikibase.world/w/api.php
+    const actionApi = (() => {
+        let actionApiMatchs = responseText.match(/<link rel="EditURI" type="application\/rsd\+xml" href="(.+?)"/)
+        if (actionApiMatchs) {
+            let x = actionApiMatchs[1].replace('?action=rsd', '');
+            // if the url starts with //, make it https://
+            if (x.startsWith('//')) {
+                x = 'https:' + x
+            }
+            return x
+        }
+        return null
+    })();
 
     if (!urlIsMediaWiki) {
         console.log(`❌ The URL ${wiki.site} is not a MediaWiki, aborting for now...`)
         return
     }
 
-    // If we got a 200 and its MediaWiki, and the item does not have a P13 claim, or the P13 claim is not Q54, then ensure P13 -> Q54
+    // If the item does not have a P13 claim, or the P13 claim is not Q54, then ensure P13 -> Q54, as the site is online
     if (!simpleClaims.P13 || ( simpleClaims.P13.length <= 1 && simpleClaims.P13[0] !== 'Q54' ) ) {
         console.log(`✅ The URL ${wiki.site} is online, so P13 can be Q54`)
         ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P13', value: 'Q54'}, requestConfig: { summary: `Add [[Property:P13]] claim for [[Item:Q54]] based on the fact it respondes with a 200 of MediaWiki` } })
@@ -131,6 +147,39 @@ ee.on('world.wikis.200', async ({ wiki, response }) => {
             if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q8') {
                 console.log(`🖊️ Adding P2 (Host) claim to ${wiki.item} for ${wiki.site}`)
                 ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P2', value: 'Q8'}, requestConfig: { summary: `Add [[Property:P2]] claim for [[Item:Q8]] based on [[Property:P1]] of ${wiki.site}` } })
+            }
+        });
+    }
+
+    // Try to figure out the inception date (P5), based on when the first edit was made
+    // We can find this by using the API, such as https://furry.wikibase.cloud/w/api.php?action=query&list=logevents&ledir=newer&lelimit=1&format=json
+    // And getting .query.logevents[0].timestamp
+    if (actionApi) {
+        queue.add(async () => {
+            try{
+                const logApiUrl = actionApi + '?action=query&list=logevents&ledir=newer&lelimit=1&format=json'
+                const actionApiResponse = await fetchc(logApiUrl, { headers: HEADERS }).then(res => res.json())
+                if (actionApiResponse.query.logevents.length != 1) {
+                    console.log(`❌ Failed to get the inception date for ${wiki.site}`)
+                }
+                // Timestamp is like 2020-02-11T18:11:02Z
+                const inceptionDate = actionApiResponse.query.logevents[0].timestamp.split('T')[0]
+                // if there is no P5 claim, add one
+                if (!simpleClaims.P5) {
+                    console.log(`🖊️ Adding P5 (Inception) claim to ${wiki.item} for ${inceptionDate}`)
+                    const today = new Date().toISOString().split('T')[0]
+                    ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P5', value: inceptionDate, references: { P21: logApiUrl, P22: today }}, requestConfig: { summary: `Add [[Property:P5]] claim for ${inceptionDate} based on the first log entry of the wiki` } })
+                }
+                // if there is a P5 claim, and it has the same value, and no reference, add the reference
+                // TODO consider adding an additions reference, if it aleady has one, but not the logApiUrl
+                if (simpleClaims.P5 && simpleClaims.P5.length <= 1 && simpleClaims.P5[0].split('T')[0] === inceptionDate && entity.claims.P5[0].references === undefined) {
+                    console.log(`🖊️ Adding references to P5 (Inception) claim to ${wiki.item} for ${inceptionDate}`)
+                    const today = new Date().toISOString().split('T')[0]
+                    const guid = entity.claims.P5[0].id
+                    ee.emit('world.editRequest.referenceSet', { data: {guid, snaks: { P21: logApiUrl, P22: today }}, requestConfig: { summary: `Add references to [[Property:P5]] claim for ${inceptionDate} based on the first log entry of the wiki` } })
+                }
+            } catch (e) {
+                console.log(`❌ Failed to get the inception date for ${wiki.site}`)
             }
         });
     }
@@ -173,17 +222,14 @@ ee.on('world.editRequest.claimEnsure', ({ data, requestConfig }) => {
         const { entities } = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
         const simpleClaims = simplifyClaims(entities[data.id].claims)
         // TODO handle multiple claims of the property?
+        // TODO run away from qualifiers for now?
         if (simpleClaims[data.property] && simpleClaims[data.property].length > 1) {
             console.log(`❌ The claim for ${data.id} with ${data.property} has more than 1 value`)
             return
         }
-        if (simpleClaims[data.property] && simpleClaims[data.property][0] === data.value) {
-            console.log(`✅ The claim for ${data.id} with ${data.property} to ${data.value} already exists`)
-            return
-        }
 
         console.log(`✅ The claim for ${data.id} with ${data.property} to ${data.value} does not exist`)
-        ee.emit('world.editRequest.claimCreate', { data: {id: data.id, property: data.property, value: data.value}, requestConfig: requestConfig })
+        ee.emit('world.editRequest.claimCreate', { data: data, requestConfig: requestConfig })
     });
 });
 
@@ -191,5 +237,12 @@ ee.on('world.editRequest.claimCreate', ({ data, requestConfig }) => {
     queue.add(async () => {
         console.log(`🖊️ Creating claim for ${data.id} with ${data.property} to ${data.value}`)
         worldEdit.claim.create(data, requestConfig)
+    });
+});
+
+ee.on('world.editRequest.referenceSet', ({ data, requestConfig }) => {
+    queue.add(async () => {
+        console.log(`🖊️ Adding reference to claim ${data.guid}`)
+        worldEdit.reference.set(data, requestConfig)
     });
 });
