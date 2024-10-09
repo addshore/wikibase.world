@@ -27,7 +27,8 @@ const worldEdit = WBEdit({
     credentials: {
         username: WORLD_USERNAME,
         password: WORLD_PASSWORD
-    }
+    },
+    bot: true,
 })
 const queue = new PQueue({concurrency: CONCURRENCY});
 const ee = new EventEmitter();
@@ -120,7 +121,6 @@ ee.on('world.wikis.200', async ({ wiki, response }) => {
         // Then ensure P2 (Host) -> Q8 (Wikibase.cloud) on the world item
         queue.add(async () => {
             if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q8') {
-                console.log(`🖊️ Adding P2 (Host) claim to ${wiki.item} for ${wiki.site}`)
                 ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P2', value: 'Q8'}, requestConfig: { summary: `Add [[Property:P2]] claim for [[Item:Q8]] based on [[Property:P1]] of ${wiki.site}` } })
             }
         });
@@ -131,23 +131,39 @@ ee.on('world.wikis.200', async ({ wiki, response }) => {
         queue.add(async () => {
             // Techncially the UI rediretcs to includes a '/' so allow that
             if (!simpleClaims.P7 || (simpleClaims.P7.length <= 1 && !simpleClaims.P7.includes(wiki.site + '/query') && !simpleClaims.P7.includes(wiki.site + '/query/'))) {
-                console.log(`🖊️ Adding P7 (Query Service UI) claim to ${wiki.item}  as it is known for wikibase.cloud hosted wikis`)
                 ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P7', value: wiki.site + '/query'}, requestConfig: { summary: `Add [[Property:P7]] claim for ${wiki.site}/query as it is known for [[Item:Q8]] hosted wikis` } })
             }
         });
         queue.add(async () => {
             if (!simpleClaims.P8 || (simpleClaims.P8.length <= 1 && simpleClaims.P8[0] !== wiki.site + '/query/sparql')) {
-                console.log(`🖊️ Adding P8 (Query Service SPARQL endpoint) claim to ${wiki.item}  as it is known for wikibase.cloud hosted wikis`)
                 ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P8', value: wiki.site + '/query/sparql'}, requestConfig: { summary: `Add [[Property:P8]] claim for ${wiki.site}/query/sparql as it is known for [[Item:Q8]] hosted wikis` } })
             }
         });
         queue.add(async () => {
             if (!simpleClaims.P49 || (simpleClaims.P49.length <= 1 && simpleClaims.P49[0] !== wiki.site + '/wiki/Main_Page')) {
-                console.log(`🖊️ Adding P49 (Main Page URL) claim to ${wiki.item}  as it is known for wikibase.cloud hosted wikis`)
                 ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P49', value: wiki.site + '/wiki/Main_Page'}, requestConfig: { summary: `Add [[Property:P49]] claim for ${wiki.site}/wiki/Main_Page as it is known for [[Item:Q8]] hosted wikis` } })
             }
         });
 
+        // We can also add P37 (wiki tool used), for a bunch of things...
+        // Q285 is the query service
+        // Q287 is cradle
+        // Q286 is quickstatements
+        queue.add(async () => {
+            if (!simpleClaims.P37 || (!simpleClaims.P37.includes('Q285'))) {
+                ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P37', value: 'Q285', qualifiers: {'P7': wiki.site + '/query', 'P8': wiki.site + '/query/sparql'}}, requestConfig: { summary: `Add [[Property:P37]] claim for [[Item:Q285]] based on the fact it is a wikibase.cloud wiki` } })
+            }
+        });
+        queue.add(async () => {
+            if (!simpleClaims.P37 || (!simpleClaims.P37.includes('Q287'))) {
+                ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P37', value: 'Q287', qualifiers: {'P1': wiki.site + '/tools/cradle'}}, requestConfig: { summary: `Add [[Property:P37]] claim for [[Item:Q287]] based on the fact it is a wikibase.cloud wiki` } })
+            }
+        });
+        queue.add(async () => {
+            if (!simpleClaims.P37 || (!simpleClaims.P37.includes('Q286'))) {
+                ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P37', value: 'Q286', qualifiers: {'P1': wiki.site + '/tools/quickstatements'}}, requestConfig: { summary: `Add [[Property:P37]] claim for [[Item:Q286]] based on the fact it is a wikibase.cloud wiki` } })
+            }
+        });
     }
 
     // Try to figure out the inception date (P5), based on when the first edit was made
@@ -209,7 +225,7 @@ ee.on('world.wikis.200', async ({ wiki, response }) => {
 
 ee.on('world.editRequest.claimUpdate', ({ data, requestConfig }) => {
     queue.add(async () => {
-        console.log(`🖊️ Updating claim for ${data.id} with ${data.property} from ${data.oldValue} to ${data.newValue}`)
+        console.log(`🖊️ Updating claim for ${data.id} with ${data.property} from ${data.oldValue} to ${data.newValue}: ${requestConfig.summary}`)
         worldEdit.claim.update(data, requestConfig)
     });
 });
@@ -234,14 +250,14 @@ ee.on('world.editRequest.claimEnsure', ({ data, requestConfig }) => {
 
 ee.on('world.editRequest.claimCreate', ({ data, requestConfig }) => {
     queue.add(async () => {
-        console.log(`🖊️ Creating claim for ${data.id} with ${data.property} to ${data.value}`)
+        console.log(`🖊️ Creating claim for ${data.id} with ${data.property} to ${data.value}: ${requestConfig.summary}`)
         worldEdit.claim.create(data, requestConfig)
     });
 });
 
 ee.on('world.editRequest.referenceSet', ({ data, requestConfig }) => {
     queue.add(async () => {
-        console.log(`🖊️ Adding reference to claim ${data.guid}`)
+        console.log(`🖊️ Adding reference to claim ${data.guid}: ${requestConfig.summary}`)
         worldEdit.reference.set(data, requestConfig)
     });
 });
