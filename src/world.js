@@ -1,6 +1,7 @@
 import WBEdit from 'wikibase-edit'
 import { WBK } from 'wikibase-sdk'
 import { simplifyClaims } from 'wikibase-sdk'
+import { simplifySparqlResults, minimizeSimplifiedSparqlResults } from 'wikibase-sdk'
 import { fetchuc, fetchc } from './../src/fetch.js';
 import { HEADERS } from './../src/general.js';
 import dotenv from 'dotenv'
@@ -34,26 +35,51 @@ const worldEdit = WBEdit({
 const world = {
     sdk: worldSDK,
     edit: worldEdit,
+    sparql: {},
     queueWork: {
+        itemCreate: async (queue, data, requestConfig) => {
+            data.type = 'item'
+            queue.add(async () => {
+                console.log(`🖊️ Creating item: ${requestConfig.summary}`)
+                await worldEdit.entity.create(data, requestConfig)
+            });
+        },
         claimUpdate: async (queue, data, requestConfig) => {
             queue.add(async () => {
                 console.log(`🖊️ Updating claim for ${data.id} with ${data.property} from ${data.oldValue} to ${data.newValue}: ${requestConfig.summary}`)
-                worldEdit.claim.update(data, requestConfig)
+                await worldEdit.claim.update(data, requestConfig)
             });
         },
         claimCreate: async (queue, data, requestConfig) => {
             queue.add(async () => {
                 console.log(`🖊️ Creating claim for ${data.id} with ${data.property} as ${data.value}: ${requestConfig.summary}`)
-                worldEdit.claim.create(data, requestConfig)
+                await worldEdit.claim.create(data, requestConfig)
             });
         },
         referenceSet: async (queue, data, requestConfig) => {
             queue.add(async () => {
                 console.log(`🖊️ Setting reference for ${data.guid}: ${requestConfig.summary}`)
-                worldEdit.reference.set(data, requestConfig)
+                await worldEdit.reference.set(data, requestConfig)
             });
         },
     }
+}
+
+/**
+ * @returns {Array<{item: string, site: string}>}
+ */
+world.sparql.wikis = async () => {
+    const sparqlQuery = `
+    PREFIX wdt: <https://wikibase.world/prop/direct/>
+    PREFIX wd: <https://wikibase.world/entity/>
+    SELECT ?item ?site WHERE {
+      ?item wdt:P3 wd:Q10.  
+      ?item wdt:P1 ?site.
+    }
+    `
+    const url = world.sdk.sparqlQuery(sparqlQuery)
+    const raw = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
+    return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
 }
 
 world.queueWork.claimEnsure = async (queue, data, requestConfig) => {

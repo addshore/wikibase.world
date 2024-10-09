@@ -1,5 +1,4 @@
 import { simplifyClaims } from 'wikibase-sdk'
-import { simplifySparqlResults, minimizeSimplifiedSparqlResults } from 'wikibase-sdk'
 import { fetchuc, fetchc } from './../src/fetch.js';
 import { world } from './../src/world.js';
 import { queues, ee, HEADERS } from './../src/general.js';
@@ -12,17 +11,7 @@ if (scriptFilter != undefined) {
 
 // Queue an initial lookup of live wikibase.world wikis
 queues.many.add(async () => {
-    const sparql = `
-    PREFIX wdt: <https://wikibase.world/prop/direct/>
-    PREFIX wd: <https://wikibase.world/entity/>
-    SELECT ?item ?site WHERE {
-      ?item wdt:P3 wd:Q10.  
-      ?item wdt:P1 ?site.
-    }
-    `
-    const url = world.sdk.sparqlQuery(sparql)
-    const raw = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
-    let results = minimizeSimplifiedSparqlResults(simplifySparqlResults((raw)))
+    let results = await world.sparql.wikis()
     // Emit a 'world.wikis' event for each wiki found
     results.forEach(async (result) => {
         if (scriptFilter != undefined && !result.site.includes(scriptFilter)) {
