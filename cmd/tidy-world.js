@@ -160,6 +160,15 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         });
     }
 
+    // If the domain ends in miraheze.org, then it is hosted by Q118
+    if (wiki.site.endsWith('.miraheze.org')) {
+        queue.add(async () => {
+            if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q118') {
+                world.queueWork.claimEnsure(queue, { id: wiki.item, property: 'P2', value: 'Q118' }, { summary: `Add [[Property:P2]] claim for [[Item:Q118]] based on [[Property:P1]] of ${wiki.site}` })
+            }
+        });
+    }
+
     // Try to figure out the inception date (P5), based on when the first edit was made
     // We can find this by using the API, such as https://furry.wikibase.cloud/w/api.php?action=query&list=logevents&ledir=newer&lelimit=1&format=json
     // And getting .query.logevents[0].timestamp
