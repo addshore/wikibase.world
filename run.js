@@ -108,8 +108,9 @@ ee.on('world.wikis.200', async ({ wiki, response }) => {
         return
     }
 
-    // If the item does not have a P13 claim, or the P13 claim is not Q54, then ensure P13 -> Q54, as the site is online
-    if (!simpleClaims.P13 || ( simpleClaims.P13.length <= 1 && simpleClaims.P13[0] !== 'Q54' ) ) {
+    // If the item does not have a P13 claim, then ensure P13 -> Q54, as the site appears online
+    // Note this doesnt change the claim, as redirects are followed, and might result in a site appearing online when it is not, such as wikibase-registry
+    if (!simpleClaims.P13 ) {
         console.log(`✅ The URL ${wiki.site} is online, so P13 can be Q54`)
         ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P13', value: 'Q54'}, requestConfig: { summary: `Add [[Property:P13]] claim for [[Item:Q54]] based on the fact it respondes with a 200 of MediaWiki` } })
     }
