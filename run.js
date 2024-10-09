@@ -115,14 +115,39 @@ ee.on('world.wikis.200', async ({ wiki, response }) => {
         ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P13', value: 'Q54'}, requestConfig: { summary: `Add [[Property:P13]] claim for [[Item:Q54]] based on the fact it respondes with a 200 of MediaWiki` } })
     }
 
-    // If the domain ends in .wikibase.cloud, then ensure P2 (Host) -> Q8 (Wikibase.cloud) on the world item
+    // If the domain ends in .wikibase.cloud
     if (wiki.site.endsWith('.wikibase.cloud')) {
+        // Then ensure P2 (Host) -> Q8 (Wikibase.cloud) on the world item
         queue.add(async () => {
             if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q8') {
                 console.log(`🖊️ Adding P2 (Host) claim to ${wiki.item} for ${wiki.site}`)
                 ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P2', value: 'Q8'}, requestConfig: { summary: `Add [[Property:P2]] claim for [[Item:Q8]] based on [[Property:P1]] of ${wiki.site}` } })
             }
         });
+        // We also know a variaty of URLs, as they are determined by the platform
+        // P7 query service UI
+        // P8 query service SPARQL endpoint
+        // P49 Main Page URL
+        queue.add(async () => {
+            // Techncially the UI rediretcs to includes a '/' so allow that
+            if (!simpleClaims.P7 || (simpleClaims.P7.length <= 1 && !simpleClaims.P7.includes(wiki.site + '/query') && !simpleClaims.P7.includes(wiki.site + '/query/'))) {
+                console.log(`🖊️ Adding P7 (Query Service UI) claim to ${wiki.item}  as it is known for wikibase.cloud hosted wikis`)
+                ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P7', value: wiki.site + '/query'}, requestConfig: { summary: `Add [[Property:P7]] claim for ${wiki.site}/query as it is known for [[Item:Q8]] hosted wikis` } })
+            }
+        });
+        queue.add(async () => {
+            if (!simpleClaims.P8 || (simpleClaims.P8.length <= 1 && simpleClaims.P8[0] !== wiki.site + '/query/sparql')) {
+                console.log(`🖊️ Adding P8 (Query Service SPARQL endpoint) claim to ${wiki.item}  as it is known for wikibase.cloud hosted wikis`)
+                ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P8', value: wiki.site + '/query/sparql'}, requestConfig: { summary: `Add [[Property:P8]] claim for ${wiki.site}/query/sparql as it is known for [[Item:Q8]] hosted wikis` } })
+            }
+        });
+        queue.add(async () => {
+            if (!simpleClaims.P49 || (simpleClaims.P49.length <= 1 && simpleClaims.P49[0] !== wiki.site + '/wiki/Main_Page')) {
+                console.log(`🖊️ Adding P49 (Main Page URL) claim to ${wiki.item}  as it is known for wikibase.cloud hosted wikis`)
+                ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P49', value: wiki.site + '/wiki/Main_Page'}, requestConfig: { summary: `Add [[Property:P49]] claim for ${wiki.site}/wiki/Main_Page as it is known for [[Item:Q8]] hosted wikis` } })
+            }
+        });
+
     }
 
     // Try to figure out the inception date (P5), based on when the first edit was made
