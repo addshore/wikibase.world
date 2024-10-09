@@ -49,6 +49,8 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     const simpleClaims = simplifyClaims(entity.claims)
     const responseText = response.loadedText
     const urlIsMediaWiki = responseText.includes('content="MediaWiki')
+    // figure out the domain, by removing the protocol and the path
+    const domain = wiki.site.replace('https://', '').replace('http://', '').split('/')[0]
     // We should be able to parse an action API from the page too
     // It is like <link rel="EditURI" type="application/rsd+xml" href="https://wikibase.world/w/api.php?action=rsd"/>
     // And we want https://wikibase.world/w/api.php
@@ -68,6 +70,27 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     if (!urlIsMediaWiki) {
         console.log(`❌ The URL ${wiki.site} is not a MediaWiki, aborting for now...`)
         return
+    }
+
+    // Make sure that the item has an en label or en alias that contains the hostname
+    // If it does not, add one
+    const enLabelMissingDomain = !entity.labels.en || !entity.labels.en.value.includes(domain)
+    let enAliasesMissingDomain = true
+    if (entity.aliases.en) {
+        entity.aliases.en.forEach(alias => {
+            if (alias.value.includes(domain)) {
+                enAliasesMissingDomain = false
+            }
+        });
+    }
+    if (enLabelMissingDomain && enAliasesMissingDomain) {
+        if (!entity.labels.en) {
+            // If there is no label, set it to the domain
+            world.queueWork.labelSet(queues.one, { id: wiki.item, language: 'en', value: domain }, { summary: `Add en label for of the domain ${domain}` })
+        } else {
+            // If there is a label, but it does not contain the domain, add it as an alias
+            world.queueWork.aliasAdd(queues.one, { id: wiki.item, language: 'en', value: domain }, { summary: `Add en alias for of the domain ${domain}` })
+        }
     }
 
     // If the item does not have a P13 claim, then ensure P13 -> Q54, as the site appears online

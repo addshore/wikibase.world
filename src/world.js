@@ -45,6 +45,18 @@ const world = {
                 await worldEdit.entity.create(data, requestConfig)
             });
         },
+        labelSet: async (queue, data, requestConfig) => {
+            queue.add(async () => {
+                console.log(`🖊️ Setting label for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`)
+                await worldEdit.label.set(data, requestConfig)
+            });
+        },
+        aliasAdd: async (queue, data, requestConfig) => {
+            queue.add(async () => {
+                console.log(`🖊️ Adding alias for ${data.id} in ${data.language} as ${data.value}: ${requestConfig.summary}`)
+                await worldEdit.alias.add(data, requestConfig)
+            });
+        },
         claimUpdate: async (queue, data, requestConfig) => {
             queue.add(async () => {
                 console.log(`🖊️ Updating claim for ${data.id} with ${data.property} from ${data.oldValue} to ${data.newValue}: ${requestConfig.summary}`)
