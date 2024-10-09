@@ -8,7 +8,7 @@ const fetchCachedInternal = NodeFetchCache.create({
     }),
 });
 const fetchuc = async (url, options) => {
-    console.log(`🚀 Fetching ${url} (uncached)`)
+    // console.log(`🚀 Fetching ${url} (uncached)`)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
@@ -18,7 +18,7 @@ const fetchuc = async (url, options) => {
     }
 }
 const fetchc = async (url, options) => {
-    console.log(`🚀 Fetching ${url} (caching)`)
+    // console.log(`🚀 Fetching ${url} (caching)`)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {

@@ -72,7 +72,6 @@ ee.on('world.wikis', (result) => {
                 console.log(`❌ The URL ${url} is not currently a 200`)
                 return
             }
-            console.log(`✅ The URL ${url} is currently a 200`)
             ee.emit('world.wikis.200', { wiki: result, response: response })
         } catch (e) {
             console.log(`❌ The URL ${url} is not currently a 200`)
@@ -112,7 +111,6 @@ ee.on('world.wikis.200', async ({ wiki, response }) => {
     // If the item does not have a P13 claim, then ensure P13 -> Q54, as the site appears online
     // Note this doesnt change the claim, as redirects are followed, and might result in a site appearing online when it is not, such as wikibase-registry
     if (!simpleClaims.P13 ) {
-        console.log(`✅ The URL ${wiki.site} is online, so P13 can be Q54`)
         ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P13', value: 'Q54'}, requestConfig: { summary: `Add [[Property:P13]] claim for [[Item:Q54]] based on the fact it respondes with a 200 of MediaWiki` } })
     }
 
@@ -164,6 +162,29 @@ ee.on('world.wikis.200', async ({ wiki, response }) => {
                 ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P37', value: 'Q286', qualifiers: {'P1': wiki.site + '/tools/quickstatements'}}, requestConfig: { summary: `Add [[Property:P37]] claim for [[Item:Q286]] based on the fact it is a wikibase.cloud wiki` } })
             }
         });
+
+        // All wikibase.cloud sites also support items and properties...
+        // SO P12 should have a statement for Q51 and Q52
+        queue.add(async () => {
+            if (!simpleClaims.P12 || (!simpleClaims.P12.includes('Q51'))) {
+                ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P12', value: 'Q51'}, requestConfig: { summary: `Add [[Property:P12]] claim for [[Item:Q51]] based on the fact it is a wikibase.cloud wiki` } })
+            }
+        });
+        queue.add(async () => {
+            if (!simpleClaims.P12 || (!simpleClaims.P12.includes('Q52'))) {
+                ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P12', value: 'Q52'}, requestConfig: { summary: `Add [[Property:P12]] claim for [[Item:Q52]] based on the fact it is a wikibase.cloud wiki` } })
+            }
+        });
+    }
+
+    // If the domain ends in wikibase.wiki
+    if (wiki.site.endsWith('.wikibase.wiki')) {
+        // Then ensure P2 (Host) -> Q7 (The Wikibase Consultancy)
+        queue.add(async () => {
+            if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q7') {
+                ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P2', value: 'Q7'}, requestConfig: { summary: `Add [[Property:P2]] claim for [[Item:Q7]] based on [[Property:P1]] of ${wiki.site}` } })
+            }
+        });
     }
 
     // Try to figure out the inception date (P5), based on when the first edit was made
@@ -181,14 +202,12 @@ ee.on('world.wikis.200', async ({ wiki, response }) => {
                 const inceptionDate = actionApiResponse.query.logevents[0].timestamp.split('T')[0]
                 // if there is no P5 claim, add one
                 if (!simpleClaims.P5) {
-                    console.log(`🖊️ Adding P5 (Inception) claim to ${wiki.item} for ${inceptionDate}`)
                     const today = new Date().toISOString().split('T')[0]
                     ee.emit('world.editRequest.claimEnsure', { data: {id: wiki.item, property: 'P5', value: inceptionDate, references: { P21: logApiUrl, P22: today }}, requestConfig: { summary: `Add [[Property:P5]] claim for ${inceptionDate} based on the first log entry of the wiki` } })
                 }
                 // if there is a P5 claim, and it has the same value, and no reference, add the reference
                 // TODO consider adding an additions reference, if it aleady has one, but not the logApiUrl
                 if (simpleClaims.P5 && simpleClaims.P5.length <= 1 && simpleClaims.P5[0].split('T')[0] === inceptionDate && entity.claims.P5[0].references === undefined) {
-                    console.log(`🖊️ Adding references to P5 (Inception) claim to ${wiki.item} for ${inceptionDate}`)
                     const today = new Date().toISOString().split('T')[0]
                     const guid = entity.claims.P5[0].id
                     ee.emit('world.editRequest.referenceSet', { data: {guid, snaks: { P21: logApiUrl, P22: today }}, requestConfig: { summary: `Add references to [[Property:P5]] claim for ${inceptionDate} based on the first log entry of the wiki` } })
@@ -206,7 +225,6 @@ ee.on('world.wikis.200', async ({ wiki, response }) => {
             try {
                 const newResponse = await fetchc(shorterUrl, { headers: HEADERS });
                 if (response.url === newResponse.url) {
-                    console.log(`✅ The URL ${wiki.site} can be shortened to ${shorterUrl}, as they both go to ${response.url}`);
                     // Skip if there is more than 1 P1 claim
                     if (simpleClaims.P1.length > 1) {
                         console.log(`❌ The item ${wiki.item} has more than 1 P1 claim`)
@@ -239,11 +257,10 @@ ee.on('world.editRequest.claimEnsure', ({ data, requestConfig }) => {
         // TODO handle multiple claims of the property?
         // TODO run away from qualifiers for now?
         if (simpleClaims[data.property] && simpleClaims[data.property].length > 1) {
-            console.log(`❌ The claim for ${data.id} with ${data.property} has more than 1 value`)
+            console.log(`❌ The claim for ${data.id} with ${data.property} has more than 1 value on ${data.id}`)
             return
         }
 
-        console.log(`✅ The claim for ${data.id} with ${data.property} to ${data.value} does not exist`)
         ee.emit('world.editRequest.claimCreate', { data: data, requestConfig: requestConfig })
     });
 });
