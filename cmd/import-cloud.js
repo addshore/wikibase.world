@@ -24,7 +24,7 @@ queues.many.add(async () => {
         }
 
         // Check if the wiki is alive, one at a time so as to not overload cloud
-        queues.one.add(async () => {
+        queues.four.add(async () => {
             const url = "https://" + wiki.domain
             try{
                 const response = await fetchc(url, { headers: HEADERS })

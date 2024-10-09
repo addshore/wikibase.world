@@ -29,6 +29,7 @@ const worldEdit = WBEdit({
         username: WORLD_USERNAME,
         password: WORLD_PASSWORD
     },
+    maxlag: 30,
     bot: true,
 })
 
