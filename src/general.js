@@ -1,9 +1,11 @@
 import PQueue from 'p-queue';
 import EventEmitter from 'node:events';
 
-const CONCURRENCY = 10;
 const HEADERS = { 'User-Agent': 'Addshore Addbot wikibase.world' };
-const queue = new PQueue({concurrency: CONCURRENCY});
+const queues = {
+    many : new PQueue({concurrency: 10}),
+    one : new PQueue({concurrency: 1}),
+}
 const ee = new EventEmitter();
 
-export { queue, ee, HEADERS };
+export { queues, ee, HEADERS };
