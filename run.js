@@ -3,10 +3,9 @@ import { simplifyClaims } from 'wikibase-sdk'
 import dotenv from 'dotenv'
 import WBEdit from 'wikibase-edit'
 import { simplifySparqlResults, minimizeSimplifiedSparqlResults } from 'wikibase-sdk'
-import NodeFetchCache, { FileSystemCache } from 'node-fetch-cache';
 import PQueue from 'p-queue';
 import EventEmitter from 'node:events';
-import fetch from 'node-fetch';
+import { fetchuc, fetchc } from './src/fetch.js'
 
 // Load .env file
 dotenv.config()
@@ -19,32 +18,6 @@ const HEADERS = { 'User-Agent': 'Addshore Addbot wikibase.world' };
 const CONCURRENCY = 10;
 
 // Setup services
-const fetchCachedInternal = NodeFetchCache.create({
-    cache: new FileSystemCache({
-        cacheDirectory: './.cache',
-        ttl: 60*30,
-    }),
-});
-const fetchuc = async (url, options) => {
-    console.log(`🚀 Fetching ${url} (uncached)`)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    try {
-        return await fetch(url, { ...options, signal: controller.signal });
-    } finally {
-        clearTimeout(timeoutId);
-    }
-}
-const fetchc = async (url, options) => {
-    console.log(`🚀 Fetching ${url} (caching)`)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    try {
-        return await fetchCachedInternal(url, { ...options, signal: controller.signal });
-    } finally {
-        clearTimeout(timeoutId);
-    }
-}
 const world = WBK({
     instance: WORLD_INSTANCE,
     sparqlEndpoint: WORLD_INSTANCE + '/query/sparql'
