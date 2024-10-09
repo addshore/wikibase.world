@@ -1,5 +1,4 @@
 import NodeFetchCache, { FileSystemCache } from 'node-fetch-cache';
-import fetch from 'node-fetch';
 
 const fetchCachedInternal = NodeFetchCache.create({
     cache: new FileSystemCache({

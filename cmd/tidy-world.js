@@ -35,15 +35,17 @@ queue.add(async () => {
 // Listen for the 'world.wikis' event and queue a check for each wiki
 ee.on('world.wikis', (result) => {
     queue.add(async () => {
-        // const itemId = result.item
         const url = result.site
         try{
             const response = await fetchc(url, { headers: HEADERS })
-            if (response.status !== 200) {
-                console.log(`❌ The URL ${url} is not currently a 200`)
+            const responseText = await response.text();
+            response.loadedText = responseText
+            if (response.status == 200 || ( response.status === 404 && responseText.includes("There is currently no text in this page") ) ) {
+                ee.emit('world.wikis.alive', { wiki: result, response: response })
+            } else {
+                console.log(`❌ The URL ${url} is not currently a 200 or a 404 with the expected text`)
                 return
             }
-            ee.emit('world.wikis.200', { wiki: result, response: response })
         } catch (e) {
             console.log(`❌ The URL ${url} is not currently a 200`)
             return
@@ -51,12 +53,12 @@ ee.on('world.wikis', (result) => {
     });
 });
 
-ee.on('world.wikis.200', async ({ wiki, response }) => {
+ee.on('world.wikis.alive', async ({ wiki, response }) => {
     const url = world.sdk.getEntities({ids: [ wiki.item ]})
     const { entities } = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
     const entity = entities[wiki.item]
     const simpleClaims = simplifyClaims(entity.claims)
-    const responseText = await response.text()
+    const responseText = response.loadedText
     const urlIsMediaWiki = responseText.includes('content="MediaWiki')
     // We should be able to parse an action API from the page too
     // It is like <link rel="EditURI" type="application/rsd+xml" href="https://wikibase.world/w/api.php?action=rsd"/>

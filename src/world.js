@@ -1,5 +1,8 @@
 import WBEdit from 'wikibase-edit'
 import { WBK } from 'wikibase-sdk'
+import { simplifyClaims } from 'wikibase-sdk'
+import { fetchuc, fetchc } from './../src/fetch.js';
+import { HEADERS } from './../src/general.js';
 import dotenv from 'dotenv'
 
 dotenv.config()
