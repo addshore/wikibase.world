@@ -51,6 +51,12 @@ const world = {
                 await worldEdit.label.set(data, requestConfig)
             });
         },
+        descriptionSet: async (queue, data, requestConfig) => {
+            queue.add(async () => {
+                console.log(`🖊️ Setting description for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`)
+                await worldEdit.description.set(data, requestConfig)
+            });
+        },
         aliasAdd: async (queue, data, requestConfig) => {
             queue.add(async () => {
                 console.log(`🖊️ Adding alias for ${data.id} in ${data.language} as ${data.value}: ${requestConfig.summary}`)

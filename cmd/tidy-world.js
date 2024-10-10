@@ -81,13 +81,16 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
 
     // We can also parse some other probably useful stuff from the main page that we already loaded...
     // Look for <title>HandWiki</title> in the responseText
-    // Also look for <meta name="description" content="Wiki Encyclopedia of Knowledge"/>
-    // Also look for <meta name="generator" content="MediaWiki 1.38.4"/>
     const title = responseText.match(/<title>(.+?)<\/title>/)[1]
+    // Also look for <meta name="description" content="Wiki Encyclopedia of Knowledge"/>
     const descriptionMatch = responseText.match(/<meta name="description" content="(.+?)"/);
-    const description = descriptionMatch ? descriptionMatch[1] : 'No description available';
+    const description = descriptionMatch ? descriptionMatch[1] : undefined
+    // Also look for <meta name="generator" content="MediaWiki 1.38.4"/>
     const generator = responseText.match(/<meta name="generator" content="(.+?)"/)[1]
     const mwVersion = generator.match(/MediaWiki (.+?)$/)[1]
+    // language from "wgPageContentLanguage":"en"
+    const languageMatch = responseText.match(/"wgPageContentLanguage":"(.+?)"/)
+    const language = languageMatch ? languageMatch[1] : 'en'
 
     // Figure out label and alias changes
     let probablyGoodLabels = []
@@ -95,59 +98,69 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         probablyGoodLabels.push(title)
     }
 
-    // Figure out what we have
-    probablyGoodLabels.push(domain)
-    // Remove "Main Page - " from any of the starts of the probablyGoodLabels
-    probablyGoodLabels = probablyGoodLabels.map(label => label.replace('Main Page - ', ''))
-    // Remove any that still inclyude Main Page
-    probablyGoodLabels = probablyGoodLabels.filter(label => !label.includes('Main Page'))
-    // And make it unique and remove any empty strings
-    probablyGoodLabels = [...new Set(probablyGoodLabels)].filter(label => label !== '')
+    if (language === 'en') {
 
-    // Figure out the current state
-    let allEnLabelsAndAliases = []
-    let enLabelIsDomain = false
-    if (entity.labels.en) {
-        allEnLabelsAndAliases.push(entity.labels.en.value)
-        if (entity.labels.en.value === domain) {
-            enLabelIsDomain = true
-        }
-    }
-    if (entity.aliases.en) {
-        entity.aliases.en.forEach(alias => {
-            allEnLabelsAndAliases.push(alias.value)
-        });
-    }
+        // Figure out what we have
+        probablyGoodLabels.push(domain)
+        // Remove "Main Page - " from any of the starts of the probablyGoodLabels
+        probablyGoodLabels = probablyGoodLabels.map(label => label.replace('Main Page - ', ''))
+        // Remove any that still inclyude Main Page
+        probablyGoodLabels = probablyGoodLabels.filter(label => !label.includes('Main Page'))
+        // And make it unique and remove any empty strings
+        probablyGoodLabels = [...new Set(probablyGoodLabels)].filter(label => label !== '')
 
-    // If one of the aliases starts with "Main Page - ", then remove it
-    // This is a temporary fix, after I added some bad titles
-    allEnLabelsAndAliases.forEach(alias => {
-        if (alias.startsWith('Main Page - ')) {
-            world.queueWork.aliasRemove(queues.one, { id: wiki.item, language: 'en', value: alias }, { summary: `Remove en alias "Main Page - " as its a bad alias` })
+        // Figure out the current state
+        let allEnLabelsAndAliases = []
+        let enLabelIsDomain = false
+        if (entity.labels.en) {
+            allEnLabelsAndAliases.push(entity.labels.en.value)
+            if (entity.labels.en.value === domain) {
+                enLabelIsDomain = true
+            }
         }
-    });
-
-    // Find what is missing
-    let missingLabels = probablyGoodLabels.filter(label => !allEnLabelsAndAliases.includes(label))
-    // if there are missing labels
-    if (missingLabels.length > 0) {
-        // if the label is already the domain, then remove it from entity.labels.en, and add it to the missingLabels
-        // This effectively swaps the domain for a better label that we now might have (if we are doing an edit)
-        if (enLabelIsDomain) {
-            entity.labels.en = undefined
-            missingLabels.push(domain)
-        }
-        // if there is no label, set the first thing there
-        if (!entity.labels.en) {
-            world.queueWork.labelSet(queues.one, { id: wiki.item, language: 'en', value: missingLabels[0] }, { summary: `Add en label from known infomation` })
-            // and remove it from the list
-            missingLabels.shift()
-        }
-        // if there are still missing labels, add them as aliases
-        if (missingLabels.length > 0) {
-            missingLabels.forEach(missingLabel => {
-                world.queueWork.aliasAdd(queues.one, { id: wiki.item, language: 'en', value: missingLabel }, { summary: `Add en alias from known infomation` })
+        if (entity.aliases.en) {
+            entity.aliases.en.forEach(alias => {
+                allEnLabelsAndAliases.push(alias.value)
             });
+        }
+
+        // If one of the aliases starts with "Main Page - ", then remove it
+        // This is a temporary fix, after I added some bad titles
+        allEnLabelsAndAliases.forEach(alias => {
+            if (alias.startsWith('Main Page - ')) {
+                world.queueWork.aliasRemove(queues.one, { id: wiki.item, language: 'en', value: alias }, { summary: `Remove en alias "Main Page - " as its a bad alias` })
+            }
+        });
+
+        // Find what is missing
+        let missingLabels = probablyGoodLabels.filter(label => !allEnLabelsAndAliases.includes(label))
+        // if there are missing labels
+        if (missingLabels.length > 0) {
+            // if the label is already the domain, then remove it from entity.labels.en, and add it to the missingLabels
+            // This effectively swaps the domain for a better label that we now might have (if we are doing an edit)
+            if (enLabelIsDomain) {
+                entity.labels.en = undefined
+                missingLabels.push(domain)
+            }
+            // if there is no label, set the first thing there
+            if (!entity.labels.en) {
+                // TODO write tests for figuring out labels and aliases before running this, ALSO this probably needs to happen in a single edit due to async
+                // world.queueWork.labelSet(queues.one, { id: wiki.item, language: 'en', value: missingLabels[0] }, { summary: `Add en label from known infomation` })
+                // and remove it from the list
+                missingLabels.shift()
+            }
+            // if there are still missing labels, add them as aliases
+            if (missingLabels.length > 0) {
+                missingLabels.forEach(missingLabel => {
+                    // TODO write tests for figuring out labels and aliases before running this, ALSO this probably needs to happen in a single edit due to async
+                    // world.queueWork.aliasAdd(queues.one, { id: wiki.item, language: 'en', value: missingLabel }, { summary: `Add en alias from known infomation` })
+                });
+            }
+        }
+
+        // If there is no en description, then set it
+        if (description && !entity.descriptions.en) {
+            world.queueWork.descriptionSet(queues.one, { id: wiki.item, language: 'en', value: description }, { summary: `Add en description from Main Page HTML` })
         }
     }
 
