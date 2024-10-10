@@ -15,6 +15,9 @@ queues.many.add(async () => {
     const data = await response.json();
     const wikis = data.data;
 
+    // shuffle the wikis, for a bit of randomness :)
+    wikis.sort(() => Math.random() - 0.5);
+
     const worldWikis = await world.sparql.wikis();
     const worldWikiURLs = worldWikis.map(wiki => wiki.site)
 

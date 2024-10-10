@@ -12,6 +12,10 @@ if (scriptFilter != undefined) {
 // Queue an initial lookup of live wikibase.world wikis
 queues.many.add(async () => {
     let results = await world.sparql.wikis()
+
+    // shuffle the wikis, for a bit of randomness :)
+    results.sort(() => Math.random() - 0.5);
+
     // Emit a 'world.wikis' event for each wiki found
     results.forEach(async (result) => {
         if (scriptFilter != undefined && !result.site.includes(scriptFilter)) {
