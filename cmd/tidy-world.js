@@ -163,6 +163,13 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         }
     }
 
+    // ends with .wmflabs.org, hosted by https://wikibase.world/wiki/Item:Q6
+    if (wiki.site.endsWith('.wmflabs.org')) {
+        if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q6') {
+            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P2', value: 'Q6' }, { summary: `Add [[Property:P2]] claim for [[Item:Q6]] based on [[Property:P1]] of ${wiki.site}` })
+        }
+    }
+
     // Try to figure out the inception date (P5), based on when the first edit was made
     // We can find this by using the API, such as https://furry.wikibase.cloud/w/api.php?action=query&list=logevents&ledir=newer&lelimit=1&format=json
     // And getting .query.logevents[0].timestamp
