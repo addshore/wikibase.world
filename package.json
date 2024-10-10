@@ -5,6 +5,7 @@
     "dotenv": "^16.4.5",
     "node-fetch-cache": "^5.0.2",
     "p-queue": "^8.0.1",
+    "serpapi": "^2.1.0",
     "wikibase-edit": "^7.1.2",
     "wikibase-sdk": "^10.2.1"
   }
