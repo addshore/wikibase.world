@@ -57,6 +57,12 @@ const world = {
                 await worldEdit.alias.add(data, requestConfig)
             });
         },
+        aliasRemove: async (queue, data, requestConfig) => {
+            queue.add(async () => {
+                console.log(`🖊️ Removing alias for ${data.id} in ${data.language} as ${data.value}: ${requestConfig.summary}`)
+                await worldEdit.alias.remove(data, requestConfig)
+            });
+        },
         claimUpdate: async (queue, data, requestConfig) => {
             queue.add(async () => {
                 console.log(`🖊️ Updating claim for ${data.id} with ${data.property} from ${data.oldValue} to ${data.newValue}: ${requestConfig.summary}`)
