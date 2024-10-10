@@ -52,9 +52,17 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     const entity = entities[wiki.item]
     const simpleClaims = simplifyClaims(entity.claims)
     const responseText = response.loadedText
+
+    // First, a very basic check to see if the URL is a MediaWiki, otherwise just RUN AWAY!
     const urlIsMediaWiki = responseText.includes('content="MediaWiki')
+    if (!urlIsMediaWiki) {
+        console.log(`❌ The URL ${wiki.site} is not a MediaWiki, aborting for now...`)
+        return
+    }
+
     // figure out the domain, by removing the protocol and the path
     const domain = wiki.site.replace('https://', '').replace('http://', '').split('/')[0]
+
     // We should be able to parse an action API from the page too
     // It is like <link rel="EditURI" type="application/rsd+xml" href="https://wikibase.world/w/api.php?action=rsd"/>
     // And we want https://wikibase.world/w/api.php
@@ -71,29 +79,57 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         return null
     })();
 
-    if (!urlIsMediaWiki) {
-        console.log(`❌ The URL ${wiki.site} is not a MediaWiki, aborting for now...`)
-        return
-    }
+    // We can also parse some other probably useful stuff from the main page that we already loaded...
+    // Look for <title>HandWiki</title> in the responseText
+    // Also look for <meta name="description" content="Wiki Encyclopedia of Knowledge"/>
+    // Also look for <meta name="generator" content="MediaWiki 1.38.4"/>
+    const title = responseText.match(/<title>(.+?)<\/title>/)[1]
+    const descriptionMatch = responseText.match(/<meta name="description" content="(.+?)"/);
+    const description = descriptionMatch ? descriptionMatch[1] : 'No description available';
+    const generator = responseText.match(/<meta name="generator" content="(.+?)"/)[1]
+    const mwVersion = generator.match(/MediaWiki (.+?)$/)[1]
 
-    // Make sure that the item has an en label or en alias that contains the hostname
-    // If it does not, add one
-    const enLabelMissingDomain = !entity.labels.en || !entity.labels.en.value.includes(domain)
-    let enAliasesMissingDomain = true
+    // Figure out label and alias changes
+    let probablyGoodLabels = []
+    if (title) {
+        probablyGoodLabels.push(title)
+    }
+    // Figure out what we have
+    probablyGoodLabels.push(domain)
+    let allEnLabelsAndAliases = []
+    let enLabelIsDomain = false
+    if (entity.labels.en) {
+        allEnLabelsAndAliases.push(entity.labels.en.value)
+        if (entity.labels.en.value === domain) {
+            enLabelIsDomain = true
+        }
+    }
     if (entity.aliases.en) {
         entity.aliases.en.forEach(alias => {
-            if (alias.value.includes(domain)) {
-                enAliasesMissingDomain = false
-            }
+            allEnLabelsAndAliases.push(alias.value)
         });
     }
-    if (enLabelMissingDomain && enAliasesMissingDomain) {
+    // Find what is missing
+    let missingLabels = probablyGoodLabels.filter(label => !allEnLabelsAndAliases.includes(label))
+    // if there are missing labels
+    if (missingLabels.length > 0) {
+        // if the label is already the domain, then remove it from entity.labels.en, and add it to the missingLabels
+        // This effectively swaps the domain for a better label that we now might have (if we are doing an edit)
+        if (enLabelIsDomain) {
+            entity.labels.en = undefined
+            missingLabels.push(domain)
+        }
+        // if there is no label, set the first thing there
         if (!entity.labels.en) {
-            // If there is no label, set it to the domain
-            world.queueWork.labelSet(queues.one, { id: wiki.item, language: 'en', value: domain }, { summary: `Add en label for of the domain ${domain}` })
-        } else {
-            // If there is a label, but it does not contain the domain, add it as an alias
-            world.queueWork.aliasAdd(queues.one, { id: wiki.item, language: 'en', value: domain }, { summary: `Add en alias for of the domain ${domain}` })
+            world.queueWork.labelSet(queues.one, { id: wiki.item, language: 'en', value: missingLabels[0] }, { summary: `Add en label for of the domain ${domain}` })
+            // and remove it from the list
+            missingLabels.shift()
+        }
+        // if there are still missing labels, add them as aliases
+        if (missingLabels.length > 0) {
+            missingLabels.forEach(missingLabel => {
+                world.queueWork.aliasAdd(queues.one, { id: wiki.item, language: 'en', value: missingLabel }, { summary: `Add en alias for of the domain ${domain}` })
+            });
         }
     }
 
