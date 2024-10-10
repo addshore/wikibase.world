@@ -2,6 +2,7 @@ import { simplifyClaims } from 'wikibase-sdk'
 import { fetchuc, fetchc } from './../src/fetch.js';
 import { world } from './../src/world.js';
 import { queues, ee, HEADERS } from './../src/general.js';
+import dns from 'dns'
 
 // get the first arg to run.js
 const scriptFilter = process.argv[2]
@@ -62,6 +63,31 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
 
     // figure out the domain, by removing the protocol and the path
     const domain = wiki.site.replace('https://', '').replace('http://', '').split('/')[0]
+
+    // loolkup the IP, then do a reverse lookup to get the domain
+    const reverseDNS = await new Promise((resolve, reject) => {
+        dns.lookup(domain, (err, address, family) => {
+            if (err) {
+                console.log(`❌ Failed to lookup the IP for ${domain}`);
+                resolve([]);
+            } else {
+                dns.reverse(address, (err, hostnames) => {
+                    if (err) {
+                        console.log(`❌ Failed to perform reverse DNS lookup for ${address}`);
+                        resolve([]);
+                    } else {
+                        resolve(hostnames);
+                    }
+                });
+            }
+        });
+    });
+    // TODO do more with these reverse DNS results
+    const REVERSE_CLOUD = "221.76.141.34.bc.googleusercontent.com";
+    // const REVERSE_WBWIKI = "server-54-230-10-103.man50.r.cloudfront.net" // TODO check this one
+    const REVERSE_WBWIKI = "server-108-138-217-36.lhr61.r.cloudfront.net"
+    const REVERSE_WIKIMEDIA = "text-lb.esams.wikimedia.org"
+    const REVERSE_WIKITIDE = "cp37.wikitide.net"
 
     // We should be able to parse an action API from the page too
     // It is like <link rel="EditURI" type="application/rsd+xml" href="https://wikibase.world/w/api.php?action=rsd"/>
@@ -171,24 +197,32 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     }
 
     // If the domain ends in .wikibase.cloud
-    if (wiki.site.endsWith('.wikibase.cloud')) {
+    if (domain.endsWith('.wikibase.cloud') || reverseDNS.includes(REVERSE_CLOUD)) {
+        let hostBy = ''
+        if (domain.endsWith('.wikibase.cloud')) {
+            hostBy = ' (from the domain)'
+        } else {
+            hostBy = ' (from reverse DNS)'
+        }
+
         // Then ensure P2 (Host) -> Q8 (Wikibase.cloud) on the world item
         if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q8') {
-            world.queueWork.claimEnsure(queue, { id: wiki.item, property: 'P2', value: 'Q8' }, { summary: `Add [[Property:P2]] claim for [[Item:Q8]] based on [[Property:P1]] of ${wiki.site}` })
+            world.queueWork.claimEnsure(queue, { id: wiki.item, property: 'P2', value: 'Q8' }, { summary: `Add [[Property:P2]] claim for [[Item:Q8]] based on [[Property:P1]] of ${wiki.site}` + hostBy })
         }
         // We also know a variaty of URLs, as they are determined by the platform
         // P7 query service UI
         // P8 query service SPARQL endpoint
         // P49 Main Page URL
         // Techncially the UI rediretcs to includes a '/' so allow that
-        if (!simpleClaims.P7 || (simpleClaims.P7.length <= 1 && !simpleClaims.P7.includes(wiki.site + '/query') && !simpleClaims.P7.includes(wiki.site + '/query/'))) {
-            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P7', value: wiki.site + '/query' }, { summary: `Add [[Property:P7]] claim for ${wiki.site}/query as it is known for [[Item:Q8]] hosted wikis` })
+        let protocolledDomain = 'https://' + domain
+        if (!simpleClaims.P7 || (simpleClaims.P7.length <= 1 && !simpleClaims.P7.includes(protocolledDomain + '/query') && !simpleClaims.P7.includes(protocolledDomain + '/query/'))) {
+            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P7', value: protocolledDomain + '/query' }, { summary: `Add [[Property:P7]] claim for ${protocolledDomain}/query as it is known for [[Item:Q8]] hosted wikis` })
         }
-        if (!simpleClaims.P8 || (simpleClaims.P8.length <= 1 && simpleClaims.P8[0] !== wiki.site + '/query/sparql')) {
-            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P8', value: wiki.site + '/query/sparql' }, { summary: `Add [[Property:P8]] claim for ${wiki.site}/query/sparql as it is known for [[Item:Q8]] hosted wikis` })
+        if (!simpleClaims.P8 || (simpleClaims.P8.length <= 1 && simpleClaims.P8[0] !== protocolledDomain + '/query/sparql')) {
+            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P8', value: protocolledDomain + '/query/sparql' }, { summary: `Add [[Property:P8]] claim for ${protocolledDomain}/query/sparql as it is known for [[Item:Q8]] hosted wikis` })
         }
-        if (!simpleClaims.P49 || (simpleClaims.P49.length <= 1 && simpleClaims.P49[0] !== wiki.site + '/wiki/Main_Page')) {
-            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P49', value: wiki.site + '/wiki/Main_Page' }, { summary: `Add [[Property:P49]] claim for ${wiki.site}/wiki/Main_Page as it is known for [[Item:Q8]] hosted wikis` })
+        if (!simpleClaims.P49 || (simpleClaims.P49.length <= 1 && simpleClaims.P49[0] !== protocolledDomain + '/wiki/Main_Page')) {
+            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P49', value: protocolledDomain + '/wiki/Main_Page' }, { summary: `Add [[Property:P49]] claim for ${protocolledDomain}/wiki/Main_Page as it is known for [[Item:Q8]] hosted wikis` })
         }
 
         // We can also add P37 (wiki tool used), for a bunch of things...
@@ -196,13 +230,13 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         // Q287 is cradle
         // Q286 is quickstatements
         if (!simpleClaims.P37 || (!simpleClaims.P37.includes('Q285'))) {
-            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P37', value: 'Q285', qualifiers: {'P7': wiki.site + '/query', 'P8': wiki.site + '/query/sparql'} }, { summary: `Add [[Property:P37]] claim for [[Item:Q285]] based on the fact it is a wikibase.cloud wiki` })
+            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P37', value: 'Q285', qualifiers: {'P7': protocolledDomain + '/query', 'P8': protocolledDomain + '/query/sparql'} }, { summary: `Add [[Property:P37]] claim for [[Item:Q285]] based on the fact it is a wikibase.cloud wiki` })
         }
         if (!simpleClaims.P37 || (!simpleClaims.P37.includes('Q287'))) {
-            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P37', value: 'Q287', qualifiers: {'P1': wiki.site + '/tools/cradle'} }, { summary: `Add [[Property:P37]] claim for [[Item:Q287]] based on the fact it is a wikibase.cloud wiki` })
+            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P37', value: 'Q287', qualifiers: {'P1': protocolledDomain + '/tools/cradle'} }, { summary: `Add [[Property:P37]] claim for [[Item:Q287]] based on the fact it is a wikibase.cloud wiki` })
         }
         if (!simpleClaims.P37 || (!simpleClaims.P37.includes('Q286'))) {
-            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P37', value: 'Q286', qualifiers: {'P1': wiki.site + '/tools/quickstatements'} }, { summary: `Add [[Property:P37]] claim for [[Item:Q286]] based on the fact it is a wikibase.cloud wiki` })
+            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P37', value: 'Q286', qualifiers: {'P1': protocolledDomain + '/tools/quickstatements'} }, { summary: `Add [[Property:P37]] claim for [[Item:Q286]] based on the fact it is a wikibase.cloud wiki` })
         }
 
         // All wikibase.cloud sites also support items and properties...
@@ -213,6 +247,8 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         if (!simpleClaims.P12 || (!simpleClaims.P12.includes('Q52'))) {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P12', value: 'Q52' }, { summary: `Add [[Property:P12]] claim for [[Item:Q52]] based on the fact it is a wikibase.cloud wiki` })
         }
+    } else {
+        console.log(domain + " -> " + reverseDNS)
     }
 
     // If the domain ends in wikibase.wiki
