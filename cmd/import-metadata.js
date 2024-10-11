@@ -2,33 +2,9 @@ import { world } from './../src/world.js';
 import { fetchuc, fetchc } from './../src/fetch.js';
 import { queues, ee, HEADERS } from './../src/general.js';
 import { checkOnlineAndWikibase } from './../src/site.js';
+import { metadatalookup } from './../src/metadata.js'
 import dotenv from 'dotenv'
 dotenv.config()
-
-let graphqlURL = "https://wikibase-metadata.toolforge.org/graphql"
-const generateQuery = (id) => {
-    return `query MyQuery {
-  wikibase(wikibaseId: ${id}) {
-    id
-    title
-    urls {
-      baseUrl
-    }
-  }
-}`
-}
-// Remove this from the wikibase
-// organization
-// location {
-//   country
-//   region
-// }
-// Removed these urls from the query
-// actionApi
-// indexApi
-// sparqlEndpointUrl
-// sparqlUrl
-// specialVersionUrl
 
 const worldWikis = await world.sparql.wikis();
 const worldWikiURLs = worldWikis.map(wiki => wiki.site)
@@ -47,26 +23,13 @@ queues.many.add(async () => {
         if (scriptFilter) {
             i = parseInt(scriptFilter)
         }
-        // POST the query to the URL
-        let postData  = {
-            operationName: "MyQuery",
-            query: generateQuery(i),
-        }
-        let headers = HEADERS
-        // add json content type hearder
-        headers['Content-Type'] = 'application/json'
-        let options = {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(postData),
-        }
-        const response = await fetchc(graphqlURL, options)
-        const data = await response.json()
-        if (!data || !data.data || !data.data.wikibase) {
-            break
+        let metadatadata = await metadatalookup(i)
+        if (!metadatadata) {
+            console.log(`❌ The wikibase ${i} does not exist`)
+            continue
         }
 
-        const wbURL = data.data.wikibase.urls.baseUrl
+        const wbURL = metadatadata.urls.baseUrl
         if (!wbURL) {
             console.log(`❌ The wikibase ${wbURL} does not have a baseUrl for MediaWiki`)
             return
@@ -75,7 +38,7 @@ queues.many.add(async () => {
 
         // Make sure it doesnt already exist, so make sure the domain doesnt appear in any of the strings in worldWikiURLs
         if (!worldWikiURLs.some(wikiURL => wikiURL.includes(domain))) {
-            ee.emit('metadata.wikis.load', { data: data.data.wikibase })
+            ee.emit('metadata.wikis.load', { data: metadatadata })
         } else {
             // if it does exist, check the metadata ID is set, OR set it
             // Find the item ID from worldWikis
@@ -92,7 +55,7 @@ queues.many.add(async () => {
                 console.log(`❌ The wikibase ${wbURL} does not have an item in the world, even though we thought it did.. lol.`)
                 return
             }
-            world.queueWork.claimEnsure(queues.one, { id: itemID, property: 'P53', value: data.data.wikibase.id }, { summary: `Add [[Property:P53]] for a known https://wikibase-metadata.toolforge.org Wikibase` })
+            world.queueWork.claimEnsure(queues.one, { id: itemID, property: 'P53', value: metadatadata.id }, { summary: `Add [[Property:P53]] for a known https://wikibase-metadata.toolforge.org Wikibase` })
         }
 
         if (scriptFilter) {

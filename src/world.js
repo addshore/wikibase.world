@@ -115,8 +115,9 @@ world.queueWork.claimEnsure = async (queue, data, requestConfig) => {
         const simpleClaims = simplifyClaims(entities[data.id].claims)
         // TODO handle multiple claims of the property?
         // TODO run away from qualifiers for now?
-        if (simpleClaims[data.property] && simpleClaims[data.property].length > 1) {
-            console.log(`❌ The claim for ${data.id} with ${data.property} has more than 1 value on ${data.id}`)
+        if (simpleClaims[data.property] && simpleClaims[data.property].length >= 1) {
+            // TODO actually check the value matches, or add it etc
+            console.log(`❌ The claim for ${data.id} with ${data.property} already has a value on ${data.id}`)
             return
         }
 

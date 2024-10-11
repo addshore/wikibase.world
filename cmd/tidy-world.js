@@ -2,6 +2,7 @@ import { simplifyClaims } from 'wikibase-sdk'
 import { fetchuc, fetchc } from './../src/fetch.js';
 import { world } from './../src/world.js';
 import { queues, ee, HEADERS } from './../src/general.js';
+import { metadatalookup } from './../src/metadata.js'
 import dns from 'dns'
 
 // get the first arg to run.js
@@ -118,6 +119,12 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     // language from "wgPageContentLanguage":"en"
     const languageMatch = responseText.match(/"wgPageContentLanguage":"(.+?)"/)
     const language = languageMatch ? languageMatch[1] : 'en'
+
+    // Lookup P53 (wikibase metadata ID)
+    if (simpleClaims.P53) {
+        let wbmetadata = await metadatalookup(simpleClaims.P53)
+        console.log(wbmetadata)
+    }
 
     // Figure out label and alias changes
     let probablyGoodLabels = []
