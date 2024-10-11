@@ -32,6 +32,7 @@ const generateQuery = (id) => {
 
 const worldWikis = await world.sparql.wikis();
 const worldWikiURLs = worldWikis.map(wiki => wiki.site)
+const worldWikiItems = worldWikis.map(wiki => wiki.item)
 
 // get the first arg to run.js
 const scriptFilter = process.argv[2]
@@ -76,7 +77,22 @@ queues.many.add(async () => {
         if (!worldWikiURLs.some(wikiURL => wikiURL.includes(domain))) {
             ee.emit('metadata.wikis.load', { data: data.data.wikibase })
         } else {
-            console.log(wbURL + " already in wikibase.world")
+            // if it does exist, check the metadata ID is set, OR set it
+            // Find the item ID from worldWikis
+            // but only using the domain
+            let itemID = undefined
+            for (let i = 0; i < worldWikiURLs.length; i++) {
+                if (worldWikiURLs[i].includes(domain)) {
+                    itemID = worldWikiItems[i]
+                    break
+                }
+            }
+
+            if (!itemID) {
+                console.log(`❌ The wikibase ${wbURL} does not have an item in the world, even though we thought it did.. lol.`)
+                return
+            }
+            world.queueWork.claimEnsure(queues.one, { id: itemID, property: 'P53', value: data.data.wikibase.id }, { summary: `Add [[Property:P53]] for a known https://wikibase-metadata.toolforge.org Wikibase` })
         }
 
         if (scriptFilter) {
@@ -87,6 +103,7 @@ queues.many.add(async () => {
 
 ee.on('metadata.wikis.load', async ({ data }) => {
     // url comes from baseUrl in urls
+    const metadataId = data.id
     const url = data.urls.baseUrl
     const { result: checkResult, text: checkString } = await checkOnlineAndWikibase(url)
     if (!checkResult) {
@@ -94,17 +111,21 @@ ee.on('metadata.wikis.load', async ({ data }) => {
         return
     }
 
-    ee.emit('metadata.wikis.new', { url: url, response: checkResult })
+    ee.emit('metadata.wikis.new', { url: url, metadataId: metadataId })
 });
 
-ee.on('metadata.wikis.new', async ({ url, response }) => {
+ee.on('metadata.wikis.new', async ({ url, metadataId }) => {
+    // get the url without the protocol
+    const urlNoProt = url.split("//")[1]
     // Create the item
     world.queueWork.itemCreate(queues.one, {
+        labels: { en: urlNoProt },
         claims: {
             // Provide a basic set of claims, but let other things be filled in later.. (by the tidy)
             P1 : url,
             P3: "Q10", // wikibase site
             P13: 'Q54', // active
+            P53: metadataId
         }
-    }, { summary: `Importing https://${domain} from https://wikibase-metadata.toolforge.org` });
+    }, { summary: `Importing ${url} from https://wikibase-metadata.toolforge.org` });
 });

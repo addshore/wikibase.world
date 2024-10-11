@@ -28,6 +28,7 @@ queues.many.add(async () => {
 
 // Listen for the 'world.wikis' event and queue a check for each wiki
 ee.on('world.wikis', (result) => {
+    // TODO order wikis with highest Qid first
     queues.many.add(async () => {
         const url = result.site
         try{
@@ -73,7 +74,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
             } else {
                 dns.reverse(address, (err, hostnames) => {
                     if (err) {
-                        console.log(`❌ Failed to perform reverse DNS lookup for ${address}`);
+                        // console.log(`❌ Failed to perform reverse DNS lookup for ${address}`);
                         resolve([]);
                     } else {
                         resolve(hostnames);
@@ -248,7 +249,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P12', value: 'Q52' }, { summary: `Add [[Property:P12]] claim for [[Item:Q52]] based on the fact it is a wikibase.cloud wiki` })
         }
     } else {
-        console.log(domain + " -> " + reverseDNS)
+        // console.log(domain + " -> " + reverseDNS)
     }
 
     // If the domain ends in wikibase.wiki
