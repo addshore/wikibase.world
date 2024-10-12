@@ -15,11 +15,12 @@ queues.many.add(async () => {
     const data = await response.json();
     const wikis = data.data;
 
-    // shuffle the wikis, for a bit of randomness :)
-    wikis.sort(() => Math.random() - 0.5);
+    // sort the wikis by id, desc
+    wikis.sort((a, b) => b.id - a.id)
 
     const worldWikis = await world.sparql.wikis();
     const worldWikiURLs = worldWikis.map(wiki => wiki.site)
+    const worldWikiItems = worldWikis.map(wiki => wiki.item)
 
     wikis.forEach(async wiki => {
         if (scriptFilter != undefined && !wiki.domain.includes(scriptFilter)) {
@@ -35,16 +36,32 @@ queues.many.add(async () => {
                 response.loadedText = responseText
                 if (response.status == 200 || ( response.status === 404 && responseText.includes("There is currently no text in this page") ) ) {
                     // Make sure it doesnt already exist, so make sure the domain doesnt appear in any of the strings in worldWikiURLs
-                    if (worldWikiURLs.some(wikiURL => wikiURL.includes(wiki.domain))) {
-                        return
+                    if (!worldWikiURLs.some(wikiURL => wikiURL.includes(wiki.domain))) {
+                        ee.emit('cloud.wikis.new', { wiki: wiki, response: response })
+                    } else {
+                        let itemID = undefined
+                        for (let i = 0; i < worldWikiURLs.length; i++) {
+                            if (worldWikiURLs[i].includes(wiki.domain)) {
+                                itemID = worldWikiItems[i]
+                                break
+                            }
+                        }
+
+                        if (!itemID) {
+                            console.log(`❌ The wikibase ${wbURL} does not have an item in the world, even though we thought it did.. lol.`)
+                            return
+                        }
+
+                        // ensure the cloud ID statement is set!
+                        world.queueWork.claimEnsure(queues.one, { id: itemID, property: 'P54', value: `${wiki.id}` }, { summary: `Add [[Property:P54]] for a known https://wikibase.cloud Wikibase` })
                     }
-                    ee.emit('cloud.wikis.new', { wiki: wiki, response: response })
+
                 } else {
                     console.log(`❌ The URL ${url} is not currently a 200 or a 404 with the expected text (should be, as it is a live cloud wiki...)`)
                     return
                 }
             } catch (e) {
-                console.log(`❌ The URL ${url} is not currently a 200 (should be, as it is a live cloud wiki...)`)
+                console.log(`❌ The URL ${url} is not currently a 200 (should be, as it is a live cloud wiki...)` + e)
                 return
             }
 
@@ -70,6 +87,7 @@ ee.on('cloud.wikis.new', ({ wiki, response }) => {
                 P3: "Q10", // wikibase site
                 P13: 'Q54', // active
                 P49: url + "/wiki/Main_Page",
+                P54: `${wiki.id}`,
             }
         }, { summary: `Importing https://${wiki.domain} from [[Item:Q8]] active wikis list` });
     });
