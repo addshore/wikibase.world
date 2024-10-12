@@ -3,6 +3,7 @@ import { fetchuc, fetchc } from './../src/fetch.js';
 import { world } from './../src/world.js';
 import { queues, ee, HEADERS } from './../src/general.js';
 import { metadatalookup } from './../src/metadata.js'
+import { simplifySparqlResults, minimizeSimplifiedSparqlResults } from 'wikibase-sdk'
 import dns from 'dns'
 
 // get the first arg to run.js
@@ -10,6 +11,11 @@ const scriptFilter = process.argv[2]
 if (scriptFilter != undefined) {
     console.log(`🚀 Running with script filter: ${scriptFilter}`)
 }
+
+const worldWikis = await world.sparql.wikis();
+const worldWikiURLs = worldWikis.map(wiki => wiki.site)
+const worldWikiDomains = worldWikiURLs.map(url => new URL(url).hostname)
+const worldWikiItems = worldWikis.map(wiki => wiki.item)
 
 // Queue an initial lookup of live wikibase.world wikis
 queues.many.add(async () => {
@@ -107,6 +113,13 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         return null
     })();
 
+    const restApi = (() => {
+        let actionApiUrl = actionApi
+        if (actionApiUrl) {
+            return actionApiUrl.replace('/api.php', '/rest.php')
+        }
+    })();
+
     // We can also parse some other probably useful stuff from the main page that we already loaded...
     // Look for <title>HandWiki</title> in the responseText
     const title = responseText.match(/<title>(.+?)<\/title>/)[1]
@@ -125,6 +138,61 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         let wbmetadata = await metadatalookup(simpleClaims.P53)
         console.log(wbmetadata)
     }
+
+    // lookup manifest if it is on
+    // w/rest.php/wikibase-manifest/v0/
+    let wbManifestData = null
+    if (restApi) {
+        try {
+            const wbManifestUrl = restApi + "/wikibase-manifest/v0/manifest"
+            const wbManifestResponse = await fetchc(wbManifestUrl, { headers: HEADERS })
+            if (wbManifestResponse.status === 200) {
+                wbManifestData = await wbManifestResponse.json()
+            }
+        } catch (e) {
+            console.log(`❌ Failed to get the manifest for ${wiki.site}`)
+        }
+    }
+    const wdEquivProps = wbManifestData ? wbManifestData.equiv_entities['wikidata.org'].properties : []
+    const wdEquivFormatterUrlProp = wdEquivProps ? wdEquivProps.P1630 : undefined
+    const worldLinksToWikibase = 'P55'
+    const worldLinedFromWikibase = 'P56'
+
+    // TODO dont do if wdEquivFormatterUrlProp is not set
+    const sparqlFormatterURLPropertyData = await (async () => {
+        // TODO, dont just use domain in this query, look it up from manifest
+        const sparqlQuery = `
+        PREFIX wdt: <https://${domain}/prop/direct/>
+        PREFIX wd: <https://${domain}/entity/>
+        SELECT ?property ?formatter WHERE {
+        ?property wdt:${wdEquivFormatterUrlProp} ?formatter.
+        }
+        `
+        console.log(sparqlQuery)
+        const url = `https://${domain}/query/sparql?format=json&query=${encodeURIComponent(sparqlQuery)}`
+        const raw = await fetchc(url, { headers: HEADERS }).then(res => res.json())
+        return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
+    })();
+
+    console.log(sparqlFormatterURLPropertyData)
+
+    // Find all domains for sparqlFormatterURLPropertyData
+    const allDomains = sparqlFormatterURLPropertyData.map(data => new URL(data.formatter).hostname)
+    const uniqueDomains = [...new Set(allDomains)]
+    // check if they are known wikibases in wikibase.world
+    const knownDomains = uniqueDomains.filter(domain => worldWikiDomains.includes(domain))
+    const knownDomainQids = knownDomains.map(domain => {
+        let index = worldWikiDomains.indexOf(domain)
+        return worldWikiItems[index]
+    })
+    console.log(knownDomains)
+    console.log(knownDomainQids)
+    // if they are known, and we have a qid, then we can add a claim to the world item
+    console.log(wiki.item)
+    knownDomainQids.forEach(qid => {
+        world.queueWork.claimEnsure(queues.four, { id: wiki.item, property: worldLinksToWikibase, value: qid }, { summary: `Add [[Property:${worldLinksToWikibase}]] via Wikidata formatter URL equivalent to [[Item:${qid}]]` })
+        world.queueWork.claimEnsure(queues.four, { id: qid, property: worldLinedFromWikibase, value: wiki.item }, { summary: `Add [[Property:${worldLinedFromWikibase}]] via Wikidata formatter URL equivalent on [[Item:${wiki.item}]]` })
+    })
 
     // Figure out label and alias changes
     let probablyGoodLabels = []
