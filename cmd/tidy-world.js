@@ -136,7 +136,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     // Lookup P53 (wikibase metadata ID)
     if (simpleClaims.P53) {
         let wbmetadata = await metadatalookup(simpleClaims.P53)
-        console.log(wbmetadata)
+        // TODO do something with this metadata data? :P
     }
 
     // lookup manifest if it is on
@@ -153,7 +153,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
             console.log(`❌ Failed to get the manifest for ${wiki.site}`)
         }
     }
-    const wdEquivProps = wbManifestData ? wbManifestData.equiv_entities['wikidata.org'].properties : []
+    const wdEquivProps = wbManifestData && wbManifestData.equiv_entities && wbManifestData.equiv_entities['wikidata.org'] ? wbManifestData.equiv_entities['wikidata.org'].properties : []
     const wdEquivFormatterUrlProp = wdEquivProps ? wdEquivProps.P1630 : undefined
     const worldLinksToWikibase = 'P55'
     const worldLinedFromWikibase = 'P56'
@@ -168,16 +168,24 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         ?property wdt:${wdEquivFormatterUrlProp} ?formatter.
         }
         `
-        console.log(sparqlQuery)
         const url = `https://${domain}/query/sparql?format=json&query=${encodeURIComponent(sparqlQuery)}`
-        const raw = await fetchc(url, { headers: HEADERS }).then(res => res.json())
-        return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
+        try {
+            const raw = await fetchc(url, { headers: HEADERS }).then(res => res.json())
+            return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
+        } catch (e) {
+            console.log(`❌ Failed to get the formatter URL property data for ${wiki.site}`)
+            return []
+        }
     })();
 
-    console.log(sparqlFormatterURLPropertyData)
-
     // Find all domains for sparqlFormatterURLPropertyData
-    const allDomains = sparqlFormatterURLPropertyData.map(data => new URL(data.formatter).hostname)
+    let allDomains = []
+    try {
+        allDomains = sparqlFormatterURLPropertyData.map(data => new URL(data.formatter).hostname)
+    } catch (e) {
+        // Some formatter "urls" are just $1 for example...
+        console.log(`❌ Failed to get the domains for the formatter URL property data for ${wiki.site}`)
+    }
     const uniqueDomains = [...new Set(allDomains)]
     // check if they are known wikibases in wikibase.world
     const knownDomains = uniqueDomains.filter(domain => worldWikiDomains.includes(domain))
@@ -185,13 +193,12 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         let index = worldWikiDomains.indexOf(domain)
         return worldWikiItems[index]
     })
-    console.log(knownDomains)
-    console.log(knownDomainQids)
     // if they are known, and we have a qid, then we can add a claim to the world item
-    console.log(wiki.item)
     knownDomainQids.forEach(qid => {
-        world.queueWork.claimEnsure(queues.four, { id: wiki.item, property: worldLinksToWikibase, value: qid }, { summary: `Add [[Property:${worldLinksToWikibase}]] via Wikidata formatter URL equivalent to [[Item:${qid}]]` })
-        world.queueWork.claimEnsure(queues.four, { id: qid, property: worldLinedFromWikibase, value: wiki.item }, { summary: `Add [[Property:${worldLinedFromWikibase}]] via Wikidata formatter URL equivalent on [[Item:${wiki.item}]]` })
+        if (qid !== wiki.item) {
+            world.queueWork.claimEnsure(queues.four, { id: wiki.item, property: worldLinksToWikibase, value: qid }, { summary: `Add [[Property:${worldLinksToWikibase}]] via Wikidata formatter URL equivalent to [[Item:${qid}]]` })
+            world.queueWork.claimEnsure(queues.four, { id: qid, property: worldLinedFromWikibase, value: wiki.item }, { summary: `Add [[Property:${worldLinedFromWikibase}]] via Wikidata formatter URL equivalent on [[Item:${wiki.item}]]` })
+        }
     })
 
     // Figure out label and alias changes
