@@ -19,6 +19,7 @@ const worldWikiItems = worldWikis.map(wiki => wiki.item)
 
 // Queue an initial lookup of live wikibase.world wikis
 queues.many.add(async () => {
+    // TODO don't lookup offline wikis (P13, Q57)
     let results = await world.sparql.wikis()
 
     // shuffle the wikis, for a bit of randomness :)
@@ -139,6 +140,42 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         // TODO do something with this metadata data? :P
     }
 
+    // Lookup external links used in the item and property namespace :D
+    // https://wikifcd.wikibase.cloud/w/api.php?action=query&list=exturlusage&euprotocol=https&eulimit=500&eunamespace=120|122&euprop=url
+    let urlDomains = new Set();
+    let loops = 0;
+    const limitExternalLinkLoops = 350;
+    // TODO skip this if the starting URL we started with redirected to another domain (like registry to wikibase.world)
+    if (actionApi && domain !== 'www.wikidata.org' && domain !== 'wikibase.world' && domain !== 'wikibase-registry.wmflabs.org') {
+        let continueToken = '';
+        do {
+            loops++;
+            let externalLinksUrl = actionApi + `?format=json&action=query&list=exturlusage&euprotocol=https&eulimit=500&eunamespace=120|122&euprop=url`;
+            if (continueToken) {
+                externalLinksUrl += `&eucontinue=${continueToken}`;
+            }
+            try {
+                const externalLinksResponse = await fetchc(externalLinksUrl, { headers: HEADERS }).then(res => res.json());
+                externalLinksResponse.query.exturlusage.forEach(link => {
+                    try {
+                        const domain = new URL(link.url).hostname;
+                        urlDomains.add(domain);
+                    } catch (e) {
+                        console.log(`❌ Failed to parse URL ${link.url}`);
+                    }
+                });
+                continueToken = externalLinksResponse.continue ? externalLinksResponse.continue.eucontinue : '';
+            } catch (e) {
+                console.log(`❌ Failed to get the external links for ${wiki.site}` + e);
+                break;
+            }
+        } while (continueToken && loops < limitExternalLinkLoops); // Only try 100 loops?
+    }
+    if (loops >= limitExternalLinkLoops) {
+        console.log(`❌ Too many loops for external links for ${wiki.site}`); // If we hit this, we might have to come up with another method? maybe search? OR looking domain by domain for known domains?
+    }
+    urlDomains = [...urlDomains]; // Convert Set to Array if needed
+
     // lookup manifest if it is on
     // w/rest.php/wikibase-manifest/v0/
     let wbManifestData = null
@@ -156,7 +193,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     const wdEquivProps = wbManifestData && wbManifestData.equiv_entities && wbManifestData.equiv_entities['wikidata.org'] ? wbManifestData.equiv_entities['wikidata.org'].properties : []
     const wdEquivFormatterUrlProp = wdEquivProps ? wdEquivProps.P1630 : undefined
     const worldLinksToWikibase = 'P55'
-    const worldLinedFromWikibase = 'P56'
+    const worldLinkedFromWikibase = 'P56'
 
     // TODO dont do if wdEquivFormatterUrlProp is not set
     const sparqlFormatterURLPropertyData = await (async () => {
@@ -179,14 +216,16 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     })();
 
     // Find all domains for sparqlFormatterURLPropertyData
-    let allDomains = []
+    let formattedExternalIdDomains = []
     try {
-        allDomains = sparqlFormatterURLPropertyData.map(data => new URL(data.formatter).hostname)
+        formattedExternalIdDomains = sparqlFormatterURLPropertyData.map(data => new URL(data.formatter).hostname)
     } catch (e) {
         // Some formatter "urls" are just $1 for example...
         console.log(`❌ Failed to get the domains for the formatter URL property data for ${wiki.site}`)
     }
-    const uniqueDomains = [...new Set(allDomains)]
+
+    const uniqueDomains = [...new Set([...urlDomains, ...formattedExternalIdDomains])]
+
     // check if they are known wikibases in wikibase.world
     const knownDomains = uniqueDomains.filter(domain => worldWikiDomains.includes(domain))
     const knownDomainQids = knownDomains.map(domain => {
@@ -196,10 +235,18 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     // if they are known, and we have a qid, then we can add a claim to the world item
     knownDomainQids.forEach(qid => {
         if (qid !== wiki.item) {
-            world.queueWork.claimEnsure(queues.four, { id: wiki.item, property: worldLinksToWikibase, value: qid }, { summary: `Add [[Property:${worldLinksToWikibase}]] via Wikidata formatter URL equivalent to [[Item:${qid}]]` })
-            world.queueWork.claimEnsure(queues.four, { id: qid, property: worldLinedFromWikibase, value: wiki.item }, { summary: `Add [[Property:${worldLinedFromWikibase}]] via Wikidata formatter URL equivalent on [[Item:${wiki.item}]]` })
+            world.queueWork.claimEnsure(queues.four, { id: wiki.item, property: worldLinksToWikibase, value: qid }, { summary: `Add [[Property:${worldLinksToWikibase}]] via "External Identifiers" and "URLs" to [[Item:${qid}]]` })
+            world.queueWork.claimEnsure(queues.four, { id: qid, property: worldLinkedFromWikibase, value: wiki.item }, { summary: `Add [[Property:${worldLinkedFromWikibase}]] via "External Identifiers" and "URLs" from [[Item:${wiki.item}]]` })
         }
     })
+    // If we accidently said Q56(linked from) -> Q3(wikibase.world) in the past, then remove them
+    if (simpleClaims.P56 && simpleClaims.P56.includes('Q3')) {
+        world.queueWork.claimRemove(queues.four, { id: wiki.item, property: worldLinkedFromWikibase, value: 'Q3' }, { summary: `Remove [[Property:${worldLinkedFromWikibase}]] from [[Item:Q3]] (as this would be far too verbose)` })
+    }
+    // Same for wikibase registry *facepalm*
+    if (simpleClaims.P56 && simpleClaims.P56.includes('Q58')) {
+        world.queueWork.claimRemove(queues.four, { id: wiki.item, property: worldLinkedFromWikibase, value: 'Q58' }, { summary: `Remove [[Property:${worldLinkedFromWikibase}]] from [[Item:Q58]] (as this would be far too verbose)` })
+    }
 
     // Figure out label and alias changes
     let probablyGoodLabels = []
@@ -215,6 +262,8 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         probablyGoodLabels = probablyGoodLabels.map(label => label.replace('Main Page - ', ''))
         // Remove any that still inclyude Main Page
         probablyGoodLabels = probablyGoodLabels.filter(label => !label.includes('Main Page'))
+        // Remove any that is wikibase-docker
+        probablyGoodLabels = probablyGoodLabels.filter(label => !label.includes('wikibase-docker'))
         // And make it unique and remove any empty strings
         probablyGoodLabels = [...new Set(probablyGoodLabels)].filter(label => label !== '')
 

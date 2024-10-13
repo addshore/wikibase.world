@@ -81,6 +81,12 @@ const world = {
                 await worldEdit.claim.create(data, requestConfig)
             });
         },
+        claimRemove: async (queue, data, requestConfig) => {
+            queue.add(async () => {
+                console.log(`🖊️ Removing claim for ${data.id} with ${data.property} as ${data.value}: ${requestConfig.summary}`)
+                await worldEdit.claim.remove(data, requestConfig)
+            });
+        },
         referenceSet: async (queue, data, requestConfig) => {
             queue.add(async () => {
                 console.log(`🖊️ Setting reference for ${data.guid}: ${requestConfig.summary}`)
@@ -113,11 +119,15 @@ world.queueWork.claimEnsure = async (queue, data, requestConfig) => {
         const url = world.sdk.getEntities({ids: [ data.id ]})
         const { entities } = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
         const simpleClaims = simplifyClaims(entities[data.id].claims)
-        // TODO handle multiple claims of the property?
-        // TODO run away from qualifiers for now?
-        if (simpleClaims[data.property] && simpleClaims[data.property].length >= 1) {
-            // TODO actually check the value matches, or add it etc
-            console.log(`❌ The claim for ${data.id} with ${data.property} already has a value on ${data.id}`)
+        // TODO we run away from qualifiers for now? :D
+        let hasClaimWithValue = false
+        simpleClaims[data.property]?.forEach(claim => {
+            if (claim === data.value) {
+                hasClaimWithValue = true
+            }
+        })
+        if (hasClaimWithValue) {
+            // console.log(`❌ The claim on ${data.id} for ${data.property} already has a value on ${simpleClaims[data.property]}: ` + requestConfig.summary)
             return
         }
 
