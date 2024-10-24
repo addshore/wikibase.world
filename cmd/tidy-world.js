@@ -234,10 +234,16 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     })
     // if they are known, and we have a qid, then we can add a claim to the world item
     knownDomainQids.forEach(qid => {
-        if (qid !== wiki.item) {
-            world.queueWork.claimEnsure(queues.four, { id: wiki.item, property: worldLinksToWikibase, value: qid }, { summary: `Add [[Property:${worldLinksToWikibase}]] via "External Identifiers" and "URLs" to [[Item:${qid}]]` })
-            world.queueWork.claimEnsure(queues.four, { id: qid, property: worldLinkedFromWikibase, value: wiki.item }, { summary: `Add [[Property:${worldLinkedFromWikibase}]] via "External Identifiers" and "URLs" from [[Item:${wiki.item}]]` })
+        // Skip things linking to themselves
+        if (qid == wiki.item) {
+            return
         }
+        // Skip anything linked from => wikibase.world, wikibase-registry
+        if (wiki.item == 'Q3' || wiki.item == 'Q58') {
+            return
+        }
+        world.queueWork.claimEnsure(queues.four, { id: wiki.item, property: worldLinksToWikibase, value: qid }, { summary: `Add [[Property:${worldLinksToWikibase}]] via "External Identifiers" and "URLs" to [[Item:${qid}]]` })
+        world.queueWork.claimEnsure(queues.four, { id: qid, property: worldLinkedFromWikibase, value: wiki.item }, { summary: `Add [[Property:${worldLinkedFromWikibase}]] via "External Identifiers" and "URLs" from [[Item:${wiki.item}]]` })
     })
     // If we accidently said Q56(linked from) -> Q3(wikibase.world) in the past, then remove them
     if (simpleClaims.P56 && simpleClaims.P56.includes('Q3')) {
