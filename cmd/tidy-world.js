@@ -328,6 +328,22 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         }
     }
 
+    // Add MediaWiki version, if not set
+    if (!simpleClaims.P57) {
+        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P57', value: mwVersion }, { summary: `Add [[Property:P57]] claim for ${mwVersion}, extracted from home page meta data` })
+    } else {
+        // If there is more than 1 version, die for now?
+        if (simpleClaims.P57.length > 1) {
+            console.log(`❌ The item ${wiki.item} has more than 1 P57 claim`)
+        } else {
+            // If the version is different, update it
+            if (simpleClaims.P57[0] !== mwVersion) {
+                // TODO account for qualifiers and references?
+                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P57', oldValue: simpleClaims.P57[0], newValue: mwVersion }, { summary: `Update [[Property:P57]] claim for ${mwVersion}, extracted from home page meta data` })
+            }
+        }
+    }
+
     // If the item does not have a P13 claim, then ensure P13 -> Q54, as the site appears online
     // Note this doesnt change the claim, as redirects are followed, and might result in a site appearing online when it is not, such as wikibase-registry
     if (!simpleClaims.P13 ) {
