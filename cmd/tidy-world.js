@@ -145,8 +145,15 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     let urlDomains = new Set();
     let loops = 0;
     const limitExternalLinkLoops = 350;
+    // Ignore these, as we don't really want to do the links for them
+    const ignoreUrlLookupDomains = [
+        'www.wikidata.org',
+        'wikibase.world',
+        'wikibase-registry.wmflabs.org',
+        'commons.wikimedia.org',
+    ]
     // TODO skip this if the starting URL we started with redirected to another domain (like registry to wikibase.world)
-    if (actionApi && domain !== 'www.wikidata.org' && domain !== 'wikibase.world' && domain !== 'wikibase-registry.wmflabs.org') {
+    if (actionApi && !ignoreUrlLookupDomains.includes(new URL(actionApi).hostname)) {
         let continueToken = '';
         do {
             loops++;
