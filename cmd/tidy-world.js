@@ -56,28 +56,37 @@ ee.on('world.wikis', (result) => {
     });
 });
 
-ee.on('world.wikis.alive', async ({ wiki, response }) => {
-    const url = world.sdk.getEntities({ids: [ wiki.item ]})
-    const { entities } = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
-    const entity = entities[wiki.item]
-    const simpleClaims = simplifyClaims(entity.claims)
-    const responseText = response.loadedText
+// Known reverse DNS records
+const REVERSE_CLOUD = "221.76.141.34.bc.googleusercontent.com";
+// const REVERSE_WBWIKI = "server-54-230-10-103.man50.r.cloudfront.net" // TODO check this one
+const REVERSE_WBWIKI = "server-108-138-217-36.lhr61.r.cloudfront.net"
+const REVERSE_WIKIMEDIA = "text-lb.esams.wikimedia.org"
+const REVERSE_WIKITIDE = "cp37.wikitide.net"
 
-    // First, a very basic check to see if the URL is a MediaWiki, otherwise just RUN AWAY!
-    const urlIsMediaWiki = responseText.includes('content="MediaWiki')
-    if (!urlIsMediaWiki) {
+// Known world properties
+const worldLinksToWikibase = 'P55'
+const worldLinkedFromWikibase = 'P56'
+
+ee.on('world.wikis.alive', async ({ wiki, response }) => {
+
+    // First, a very basic check to see if the URL we retrieved is a MediaWiki, otherwise just RUN AWAY!
+    wiki.responseText = response.loadedText
+    if (!wiki.responseText.includes('content="MediaWiki')) {
         console.log(`❌ The URL ${wiki.site} is not a MediaWiki, aborting for now...`)
         return
     }
 
-    // figure out the domain, by removing the protocol and the path
-    const domain = wiki.site.replace('https://', '').replace('http://', '').split('/')[0]
+    // Lookup the item for the site on wikibase.world
+    const { entities } = await fetchuc(world.sdk.getEntities({ids: [ wiki.item ]}), { headers: HEADERS }).then(res => res.json())
+    wiki.entity = entities[wiki.item]
+    wiki.simpleClaims = simplifyClaims(wiki.entity.claims)
 
-    // loolkup the IP, then do a reverse lookup to get the domain
-    const reverseDNS = await new Promise((resolve, reject) => {
-        dns.lookup(domain, (err, address, family) => {
+    // And figure out a bunch of other known infomation about it
+    wiki.domain = wiki.site.replace('https://', '').replace('http://', '').split('/')[0]
+    wiki.reverseDNS = await new Promise((resolve, reject) => {
+        dns.lookup(wiki.domain, (err, address, family) => {
             if (err) {
-                console.log(`❌ Failed to lookup the IP for ${domain}`);
+                console.log(`❌ Failed to lookup the IP for ${wiki.domain}`);
                 resolve([]);
             } else {
                 dns.reverse(address, (err, hostnames) => {
@@ -91,20 +100,13 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
             }
         });
     });
-    // TODO do more with these reverse DNS results
-    const REVERSE_CLOUD = "221.76.141.34.bc.googleusercontent.com";
-    // const REVERSE_WBWIKI = "server-54-230-10-103.man50.r.cloudfront.net" // TODO check this one
-    const REVERSE_WBWIKI = "server-108-138-217-36.lhr61.r.cloudfront.net"
-    const REVERSE_WIKIMEDIA = "text-lb.esams.wikimedia.org"
-    const REVERSE_WIKITIDE = "cp37.wikitide.net"
-
     // We should be able to parse an action API from the page too
     // It is like <link rel="EditURI" type="application/rsd+xml" href="https://wikibase.world/w/api.php?action=rsd"/>
     // And we want https://wikibase.world/w/api.php
-    const actionApi = (() => {
-        let actionApiMatchs = responseText.match(/<link rel="EditURI" type="application\/rsd\+xml" href="(.+?)"/)
-        if (actionApiMatchs) {
-            let x = actionApiMatchs[1].replace('?action=rsd', '');
+    wiki.actionApi = (() => {
+        let actionApiMatches = wiki.responseText.match(/<link rel="EditURI" type="application\/rsd\+xml" href="(.+?)"/)
+        if (actionApiMatches) {
+            let x = actionApiMatches[1].replace('?action=rsd', '');
             // if the url starts with //, make it https://
             if (x.startsWith('//')) {
                 x = 'https:' + x
@@ -113,36 +115,32 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         }
         return null
     })();
-
-    const restApi = (() => {
-        let actionApiUrl = actionApi
-        if (actionApiUrl) {
-            return actionApiUrl.replace('/api.php', '/rest.php')
+    wiki.restApi = (() => {
+        if (wiki.actionApi) {
+            return wiki.actionApi.replace('/api.php', '/rest.php')
         }
+        return null
     })();
-
-    // We can also parse some other probably useful stuff from the main page that we already loaded...
     // Look for <title>HandWiki</title> in the responseText
-    const title = responseText.match(/<title>(.+?)<\/title>/)[1]
+    wiki.title = wiki.responseText.match(/<title>(.+?)<\/title>/)[1]
     // Also look for <meta name="description" content="Wiki Encyclopedia of Knowledge"/>
-    const descriptionMatch = responseText.match(/<meta name="description" content="(.+?)"/);
-    const description = descriptionMatch ? descriptionMatch[1] : undefined
+    const descriptionMatch = wiki.responseText.match(/<meta name="description" content="(.+?)"/);
+    wiki.metaDescription = descriptionMatch ? descriptionMatch[1] : undefined
     // Also look for <meta name="generator" content="MediaWiki 1.38.4"/>
-    const generator = responseText.match(/<meta name="generator" content="(.+?)"/)[1]
-    const mwVersion = generator.match(/MediaWiki (.+?)$/)[1]
+    wiki.metaGenerator = wiki.responseText.match(/<meta name="generator" content="(.+?)"/)[1]
+    wiki.mwVersion = wiki.metaGenerator.match(/MediaWiki (.+?)$/)[1]
     // language from "wgPageContentLanguage":"en"
-    const languageMatch = responseText.match(/"wgPageContentLanguage":"(.+?)"/)
-    const language = languageMatch ? languageMatch[1] : 'en'
+    const languageMatch = wiki.responseText.match(/"wgPageContentLanguage":"(.+?)"/)
+    wiki.language = languageMatch ? languageMatch[1] : 'en'
 
-    // Lookup P53 (wikibase metadata ID)
-    if (simpleClaims.P53) {
-        let wbmetadata = await metadatalookup(simpleClaims.P53)
-        // TODO do something with this metadata data? :P
+    // Lookup P53 (wikibase metadata ID), and thus the data from the metadata site
+    if (wiki.simpleClaims.P53) {
+        wiki.wbmetadata = await metadatalookup(wiki.simpleClaims.P53)
     }
 
     // Lookup external links used in the item and property namespace :D
     // https://wikifcd.wikibase.cloud/w/api.php?action=query&list=exturlusage&euprotocol=https&eulimit=500&eunamespace=120|122&euprop=url
-    let urlDomains = new Set();
+    wiki.urlDomains = new Set();
     let loops = 0;
     const limitExternalLinkLoops = 350;
     // Ignore these, as we don't really want to do the links for them
@@ -153,11 +151,11 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         'commons.wikimedia.org',
     ]
     // TODO skip this if the starting URL we started with redirected to another domain (like registry to wikibase.world)
-    if (actionApi && !ignoreUrlLookupDomains.includes(new URL(actionApi).hostname)) {
+    if (wiki.actionApi && !ignoreUrlLookupDomains.includes(new URL(wiki.actionApi).hostname)) {
         let continueToken = '';
         do {
             loops++;
-            let externalLinksUrl = actionApi + `?format=json&action=query&list=exturlusage&euprotocol=https&eulimit=500&eunamespace=120|122&euprop=url`;
+            let externalLinksUrl = wiki.actionApi + `?format=json&action=query&list=exturlusage&euprotocol=https&eulimit=500&eunamespace=120|122&euprop=url`;
             if (continueToken) {
                 externalLinksUrl += `&eucontinue=${continueToken}`;
             }
@@ -166,7 +164,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                 externalLinksResponse.query.exturlusage.forEach(link => {
                     try {
                         const domain = new URL(link.url).hostname;
-                        urlDomains.add(domain);
+                        wiki.urlDomains.add(domain);
                     } catch (e) {
                         console.log(`❌ Failed to parse URL ${link.url}`);
                     }
@@ -181,38 +179,36 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     if (loops >= limitExternalLinkLoops) {
         console.log(`❌ Too many loops for external links for ${wiki.site}`); // If we hit this, we might have to come up with another method? maybe search? OR looking domain by domain for known domains?
     }
-    urlDomains = [...urlDomains]; // Convert Set to Array if needed
+    wiki.urlDomains = [...wiki.urlDomains]; // Convert Set to Array if needed
 
     // lookup manifest if it is on
     // w/rest.php/wikibase-manifest/v0/
-    let wbManifestData = null
-    if (restApi) {
+    wiki.wbManifestData = null
+    if (wiki.restApi) {
         try {
-            const wbManifestUrl = restApi + "/wikibase-manifest/v0/manifest"
+            const wbManifestUrl = wiki.restApi + "/wikibase-manifest/v0/manifest"
             const wbManifestResponse = await fetchc(wbManifestUrl, { headers: HEADERS })
             if (wbManifestResponse.status === 200) {
-                wbManifestData = await wbManifestResponse.json()
+                wiki.wbManifestData = await wbManifestResponse.json()
             }
         } catch (e) {
             console.log(`❌ Failed to get the manifest for ${wiki.site}`)
         }
     }
-    const wdEquivProps = wbManifestData && wbManifestData.equiv_entities && wbManifestData.equiv_entities['wikidata.org'] ? wbManifestData.equiv_entities['wikidata.org'].properties : []
-    const wdEquivFormatterUrlProp = wdEquivProps ? wdEquivProps.P1630 : undefined
-    const worldLinksToWikibase = 'P55'
-    const worldLinkedFromWikibase = 'P56'
+    wiki.wdEquivProps = wiki.wbManifestData && wiki.wbManifestData.equiv_entities && wiki.wbManifestData.equiv_entities['wikidata.org'] ? wiki.wbManifestData.equiv_entities['wikidata.org'].properties : []
+    wiki.wdEquivFormatterUrlProp = wiki.wdEquivProps ? wiki.wdEquivProps.P1630 : undefined
 
     // TODO dont do if wdEquivFormatterUrlProp is not set
     const sparqlFormatterURLPropertyData = await (async () => {
         // TODO, dont just use domain in this query, look it up from manifest
         const sparqlQuery = `
-        PREFIX wdt: <https://${domain}/prop/direct/>
-        PREFIX wd: <https://${domain}/entity/>
+        PREFIX wdt: <https://${wiki.domain}/prop/direct/>
+        PREFIX wd: <https://${wiki.domain}/entity/>
         SELECT ?property ?formatter WHERE {
-        ?property wdt:${wdEquivFormatterUrlProp} ?formatter.
+        ?property wdt:${wiki.wdEquivFormatterUrlProp} ?formatter.
         }
         `
-        const url = `https://${domain}/query/sparql?format=json&query=${encodeURIComponent(sparqlQuery)}`
+        const url = `https://${wiki.domain}/query/sparql?format=json&query=${encodeURIComponent(sparqlQuery)}`
         try {
             const raw = await fetchc(url, { headers: HEADERS }).then(res => res.json())
             return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
@@ -223,18 +219,20 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     })();
 
     // Find all domains for sparqlFormatterURLPropertyData
-    let formattedExternalIdDomains = []
+    wiki.formattedExternalIdDomains = []
     try {
-        formattedExternalIdDomains = sparqlFormatterURLPropertyData.map(data => new URL(data.formatter).hostname)
+        wiki.formattedExternalIdDomains = sparqlFormatterURLPropertyData.map(data => new URL(data.formatter).hostname)
     } catch (e) {
         // Some formatter "urls" are just $1 for example...
         console.log(`❌ Failed to get the domains for the formatter URL property data for ${wiki.site}`)
     }
 
-    const uniqueDomains = [...new Set([...urlDomains, ...formattedExternalIdDomains])]
+    ////////////////////////////////
+    // Start processing now we know stuff
+    ////////////////////////////////
 
     // check if they are known wikibases in wikibase.world
-    const knownDomains = uniqueDomains.filter(domain => worldWikiDomains.includes(domain))
+    const knownDomains = [...new Set([...wiki.urlDomains, ...wiki.formattedExternalIdDomains])].filter(domain => worldWikiDomains.includes(domain))
     const knownDomainQids = knownDomains.map(domain => {
         let index = worldWikiDomains.indexOf(domain)
         return worldWikiItems[index]
@@ -253,24 +251,24 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         world.queueWork.claimEnsure(queues.four, { id: qid, property: worldLinkedFromWikibase, value: wiki.item }, { summary: `Add [[Property:${worldLinkedFromWikibase}]] via "External Identifiers" and "URLs" from [[Item:${wiki.item}]]` })
     })
     // If we accidently said Q56(linked from) -> Q3(wikibase.world) in the past, then remove them
-    if (simpleClaims.P56 && simpleClaims.P56.includes('Q3')) {
+    if (wiki.simpleClaims.P56 && wiki.simpleClaims.P56.includes('Q3')) {
         world.queueWork.claimRemove(queues.four, { id: wiki.item, property: worldLinkedFromWikibase, value: 'Q3' }, { summary: `Remove [[Property:${worldLinkedFromWikibase}]] from [[Item:Q3]] (as this would be far too verbose)` })
     }
     // Same for wikibase registry *facepalm*
-    if (simpleClaims.P56 && simpleClaims.P56.includes('Q58')) {
+    if (wiki.simpleClaims.P56 && wiki.simpleClaims.P56.includes('Q58')) {
         world.queueWork.claimRemove(queues.four, { id: wiki.item, property: worldLinkedFromWikibase, value: 'Q58' }, { summary: `Remove [[Property:${worldLinkedFromWikibase}]] from [[Item:Q58]] (as this would be far too verbose)` })
     }
 
     // Figure out label and alias changes
     let probablyGoodLabels = []
-    if (title) {
-        probablyGoodLabels.push(title)
+    if (wiki.title) {
+        probablyGoodLabels.push(wiki.title)
     }
 
-    if (language === 'en') {
+    if (wiki.language === 'en') {
 
         // Figure out what we have
-        probablyGoodLabels.push(domain)
+        probablyGoodLabels.push(wiki.domain)
         // Remove "Main Page - " from any of the starts of the probablyGoodLabels
         probablyGoodLabels = probablyGoodLabels.map(label => label.replace('Main Page - ', ''))
         // Remove any that still inclyude Main Page
@@ -283,14 +281,14 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         // Figure out the current state
         let allEnLabelsAndAliases = []
         let enLabelIsDomain = false
-        if (entity.labels.en) {
-            allEnLabelsAndAliases.push(entity.labels.en.value)
-            if (entity.labels.en.value === domain) {
+        if (wiki.entity.labels.en) {
+            allEnLabelsAndAliases.push(wiki.entity.labels.en.value)
+            if (wiki.entity.labels.en.value === wiki.domain) {
                 enLabelIsDomain = true
             }
         }
-        if (entity.aliases.en) {
-            entity.aliases.en.forEach(alias => {
+        if (wiki.entity.aliases.en) {
+            wiki.entity.aliases.en.forEach(alias => {
                 allEnLabelsAndAliases.push(alias.value)
             });
         }
@@ -310,11 +308,11 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
             // if the label is already the domain, then remove it from entity.labels.en, and add it to the missingLabels
             // This effectively swaps the domain for a better label that we now might have (if we are doing an edit)
             if (enLabelIsDomain) {
-                entity.labels.en = undefined
-                missingLabels.push(domain)
+                wiki.entity.labels.en = undefined
+                missingLabels.push(wiki.domain)
             }
             // if there is no label, set the first thing there
-            if (!entity.labels.en) {
+            if (!wiki.entity.labels.en) {
                 // TODO write tests for figuring out labels and aliases before running this, ALSO this probably needs to happen in a single edit due to async
                 // world.queueWork.labelSet(queues.one, { id: wiki.item, language: 'en', value: missingLabels[0] }, { summary: `Add en label from known infomation` })
                 // and remove it from the list
@@ -330,44 +328,44 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         }
 
         // If there is no en description, then set it
-        if (description && !entity.descriptions.en) {
-            world.queueWork.descriptionSet(queues.one, { id: wiki.item, language: 'en', value: description }, { summary: `Add en description from Main Page HTML` })
+        if (wiki.metaDescription && !wiki.entity.descriptions.en) {
+            world.queueWork.descriptionSet(queues.one, { id: wiki.item, language: 'en', value: wiki.metaDescription }, { summary: `Add en description from Main Page HTML` })
         }
     }
 
     // Add MediaWiki version, if not set
-    if (!simpleClaims.P57) {
-        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P57', value: mwVersion }, { summary: `Add [[Property:P57]] claim for ${mwVersion}, extracted from home page meta data` })
+    if (!wiki.simpleClaims.P57) {
+        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P57', value: wiki.mwVersion }, { summary: `Add [[Property:P57]] claim for ${wiki.mwVersion}, extracted from home page meta data` })
     } else {
         // If there is more than 1 version, die for now?
-        if (simpleClaims.P57.length > 1) {
+        if (wiki.simpleClaims.P57.length > 1) {
             console.log(`❌ The item ${wiki.item} has more than 1 P57 claim`)
         } else {
             // If the version is different, update it
-            if (simpleClaims.P57[0] !== mwVersion) {
+            if (wiki.simpleClaims.P57[0] !== wiki.mwVersion) {
                 // TODO account for qualifiers and references?
-                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P57', oldValue: simpleClaims.P57[0], newValue: mwVersion }, { summary: `Update [[Property:P57]] claim for ${mwVersion}, extracted from home page meta data` })
+                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P57', oldValue: wiki.simpleClaims.P57[0], newValue: wiki.mwVersion }, { summary: `Update [[Property:P57]] claim for ${wiki.mwVersion}, extracted from home page meta data` })
             }
         }
     }
 
     // If the item does not have a P13 claim, then ensure P13 -> Q54, as the site appears online
     // Note this doesnt change the claim, as redirects are followed, and might result in a site appearing online when it is not, such as wikibase-registry
-    if (!simpleClaims.P13 ) {
+    if (!wiki.simpleClaims.P13 ) {
         world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P13', value: 'Q54' }, { summary: `Add [[Property:P13]] claim for [[Item:Q54]] based on the fact it respondes with a 200 of MediaWiki` })
     }
 
     // If the domain ends in .wikibase.cloud
-    if (domain.endsWith('.wikibase.cloud') || reverseDNS.includes(REVERSE_CLOUD)) {
+    if (wiki.domain.endsWith('.wikibase.cloud') || wiki.reverseDNS.includes(REVERSE_CLOUD)) {
         let hostBy = ''
-        if (domain.endsWith('.wikibase.cloud')) {
+        if (wiki.domain.endsWith('.wikibase.cloud')) {
             hostBy = ' (from the domain)'
         } else {
             hostBy = ' (from reverse DNS)'
         }
 
         // Then ensure P2 (Host) -> Q8 (Wikibase.cloud) on the world item
-        if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q8') {
+        if (!wiki.simpleClaims.P2 || wiki.simpleClaims.P2[0] !== 'Q8') {
             world.queueWork.claimEnsure(queue, { id: wiki.item, property: 'P2', value: 'Q8' }, { summary: `Add [[Property:P2]] claim for [[Item:Q8]] based on [[Property:P1]] of ${wiki.site}` + hostBy })
         }
         // We also know a variaty of URLs, as they are determined by the platform
@@ -375,14 +373,14 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         // P8 query service SPARQL endpoint
         // P49 Main Page URL
         // Techncially the UI rediretcs to includes a '/' so allow that
-        let protocolledDomain = 'https://' + domain
-        if (!simpleClaims.P7 || (simpleClaims.P7.length <= 1 && !simpleClaims.P7.includes(protocolledDomain + '/query') && !simpleClaims.P7.includes(protocolledDomain + '/query/'))) {
+        let protocolledDomain = 'https://' + wiki.domain
+        if (!wiki.simpleClaims.P7 || (wiki.simpleClaims.P7.length <= 1 && !wiki.simpleClaims.P7.includes(protocolledDomain + '/query') && !wiki.simpleClaims.P7.includes(protocolledDomain + '/query/'))) {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P7', value: protocolledDomain + '/query' }, { summary: `Add [[Property:P7]] claim for ${protocolledDomain}/query as it is known for [[Item:Q8]] hosted wikis` })
         }
-        if (!simpleClaims.P8 || (simpleClaims.P8.length <= 1 && simpleClaims.P8[0] !== protocolledDomain + '/query/sparql')) {
+        if (!wiki.simpleClaims.P8 || (wiki.simpleClaims.P8.length <= 1 && wiki.simpleClaims.P8[0] !== protocolledDomain + '/query/sparql')) {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P8', value: protocolledDomain + '/query/sparql' }, { summary: `Add [[Property:P8]] claim for ${protocolledDomain}/query/sparql as it is known for [[Item:Q8]] hosted wikis` })
         }
-        if (!simpleClaims.P49 || (simpleClaims.P49.length <= 1 && simpleClaims.P49[0] !== protocolledDomain + '/wiki/Main_Page')) {
+        if (!wiki.simpleClaims.P49 || (wiki.simpleClaims.P49.length <= 1 && wiki.simpleClaims.P49[0] !== protocolledDomain + '/wiki/Main_Page')) {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P49', value: protocolledDomain + '/wiki/Main_Page' }, { summary: `Add [[Property:P49]] claim for ${protocolledDomain}/wiki/Main_Page as it is known for [[Item:Q8]] hosted wikis` })
         }
 
@@ -390,46 +388,46 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         // Q285 is the query service
         // Q287 is cradle
         // Q286 is quickstatements
-        if (!simpleClaims.P37 || (!simpleClaims.P37.includes('Q285'))) {
+        if (!wiki.simpleClaims.P37 || (!wiki.simpleClaims.P37.includes('Q285'))) {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P37', value: 'Q285', qualifiers: {'P7': protocolledDomain + '/query', 'P8': protocolledDomain + '/query/sparql'} }, { summary: `Add [[Property:P37]] claim for [[Item:Q285]] based on the fact it is a wikibase.cloud wiki` })
         }
-        if (!simpleClaims.P37 || (!simpleClaims.P37.includes('Q287'))) {
+        if (!wiki.simpleClaims.P37 || (!wiki.simpleClaims.P37.includes('Q287'))) {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P37', value: 'Q287', qualifiers: {'P1': protocolledDomain + '/tools/cradle'} }, { summary: `Add [[Property:P37]] claim for [[Item:Q287]] based on the fact it is a wikibase.cloud wiki` })
         }
-        if (!simpleClaims.P37 || (!simpleClaims.P37.includes('Q286'))) {
+        if (!wiki.simpleClaims.P37 || (!wiki.simpleClaims.P37.includes('Q286'))) {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P37', value: 'Q286', qualifiers: {'P1': protocolledDomain + '/tools/quickstatements'} }, { summary: `Add [[Property:P37]] claim for [[Item:Q286]] based on the fact it is a wikibase.cloud wiki` })
         }
 
         // All wikibase.cloud sites also support items and properties...
         // SO P12 should have a statement for Q51 and Q52
-        if (!simpleClaims.P12 || (!simpleClaims.P12.includes('Q51'))) {
+        if (!wiki.simpleClaims.P12 || (!wiki.simpleClaims.P12.includes('Q51'))) {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P12', value: 'Q51' }, { summary: `Add [[Property:P12]] claim for [[Item:Q51]] based on the fact it is a wikibase.cloud wiki` })
         }
-        if (!simpleClaims.P12 || (!simpleClaims.P12.includes('Q52'))) {
+        if (!wiki.simpleClaims.P12 || (!wiki.simpleClaims.P12.includes('Q52'))) {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P12', value: 'Q52' }, { summary: `Add [[Property:P12]] claim for [[Item:Q52]] based on the fact it is a wikibase.cloud wiki` })
         }
     } else {
-        // console.log(domain + " -> " + reverseDNS)
+        // console.log(wiki.domain + " -> " + wiki.reverseDNS)
     }
 
     // If the domain ends in wikibase.wiki
     if (wiki.site.endsWith('.wikibase.wiki')) {
         // Then ensure P2 (Host) -> Q7 (The Wikibase Consultancy)
-        if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q7') {
+        if (!wiki.simpleClaims.P2 || wiki.simpleClaims.P2[0] !== 'Q7') {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P2', value: 'Q7' }, { summary: `Add [[Property:P2]] claim for [[Item:Q7]] based on [[Property:P1]] of ${wiki.site}` })
         }
     }
 
     // If the domain ends in miraheze.org, then it is hosted by Q118
     if (wiki.site.endsWith('.miraheze.org')) {
-        if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q118') {
+        if (!wiki.simpleClaims.P2 || wiki.simpleClaims.P2[0] !== 'Q118') {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P2', value: 'Q118' }, { summary: `Add [[Property:P2]] claim for [[Item:Q118]] based on [[Property:P1]] of ${wiki.site}` })
         }
     }
 
     // ends with .wmflabs.org, hosted by https://wikibase.world/wiki/Item:Q6
     if (wiki.site.endsWith('.wmflabs.org')) {
-        if (!simpleClaims.P2 || simpleClaims.P2[0] !== 'Q6') {
+        if (!wiki.simpleClaims.P2 || wiki.simpleClaims.P2[0] !== 'Q6') {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P2', value: 'Q6' }, { summary: `Add [[Property:P2]] claim for [[Item:Q6]] based on [[Property:P1]] of ${wiki.site}` })
         }
     }
@@ -437,10 +435,10 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     // Try to figure out the inception date (P5), based on when the first edit was made
     // We can find this by using the API, such as https://furry.wikibase.cloud/w/api.php?action=query&list=logevents&ledir=newer&lelimit=1&format=json
     // And getting .query.logevents[0].timestamp
-    if (actionApi) {
+    if (wiki.actionApi) {
         queues.many.add(async () => {
             try{
-                const logApiUrl = actionApi + '?action=query&list=logevents&ledir=newer&lelimit=1&format=json'
+                const logApiUrl = wiki.actionApi + '?action=query&list=logevents&ledir=newer&lelimit=1&format=json'
                 const actionApiResponse = await fetchc(logApiUrl, { headers: HEADERS }).then(res => res.json())
                 if (actionApiResponse.query.logevents.length != 1) {
                     console.log(`❌ Failed to get the inception date for ${wiki.site}`)
@@ -448,15 +446,15 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                 // Timestamp is like 2020-02-11T18:11:02Z
                 const inceptionDate = actionApiResponse.query.logevents[0].timestamp.split('T')[0]
                 // if there is no P5 claim, add one
-                if (!simpleClaims.P5) {
+                if (!wiki.simpleClaims.P5) {
                     const today = new Date().toISOString().split('T')[0]
                     world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P5', value: inceptionDate, references: { P21: logApiUrl, P22: today } }, { summary: `Add [[Property:P5]] claim for ${inceptionDate} based on the first log entry of the wiki` })
                 }
                 // if there is a P5 claim, and it has the same value, and no reference, add the reference
                 // TODO consider adding an additions reference, if it aleady has one, but not the logApiUrl
-                if (simpleClaims.P5 && simpleClaims.P5.length <= 1 && simpleClaims.P5[0].split('T')[0] === inceptionDate && entity.claims.P5[0].references === undefined) {
+                if (wiki.simpleClaims.P5 && wiki.simpleClaims.P5.length <= 1 && wiki.simpleClaims.P5[0].split('T')[0] === inceptionDate && wiki.entity.claims.P5[0].references === undefined) {
                     const today = new Date().toISOString().split('T')[0]
-                    const guid = entity.claims.P5[0].id
+                    const guid = wiki.entity.claims.P5[0].id
                     world.queueWork.referenceSet(queues.one, { guid, snaks: { P21: logApiUrl, P22: today } }, { summary: `Add references to [[Property:P5]] claim for ${inceptionDate} based on the first log entry of the wiki` })
                 }
             } catch (e) {
@@ -473,7 +471,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                 const newResponse = await fetchc(shorterUrl, { headers: HEADERS });
                 if (response.url === newResponse.url) {
                     // Skip if there is more than 1 P1 claim
-                    if (simpleClaims.P1.length > 1) {
+                    if (wiki.simpleClaims.P1.length > 1) {
                         console.log(`❌ The item ${wiki.item} has more than 1 P1 claim`)
                         return
                     }
