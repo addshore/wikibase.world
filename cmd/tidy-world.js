@@ -64,6 +64,7 @@ const REVERSE_WIKIMEDIA = "text-lb.esams.wikimedia.org"
 const REVERSE_WIKITIDE = "cp37.wikitide.net"
 
 // Known world properties
+const worldWikibseMetadataId = 'P53'
 const worldLinksToWikibase = 'P55'
 const worldLinkedFromWikibase = 'P56'
 
@@ -76,12 +77,6 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         return
     }
 
-    // Lookup the item for the site on wikibase.world
-    const { entities } = await fetchuc(world.sdk.getEntities({ids: [ wiki.item ]}), { headers: HEADERS }).then(res => res.json())
-    wiki.entity = entities[wiki.item]
-    wiki.simpleClaims = simplifyClaims(wiki.entity.claims)
-
-    // And figure out a bunch of other known infomation about it
     wiki.domain = wiki.site.replace('https://', '').replace('http://', '').split('/')[0]
     wiki.reverseDNS = await new Promise((resolve, reject) => {
         dns.lookup(wiki.domain, (err, address, family) => {
@@ -100,9 +95,6 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
             }
         });
     });
-    // We should be able to parse an action API from the page too
-    // It is like <link rel="EditURI" type="application/rsd+xml" href="https://wikibase.world/w/api.php?action=rsd"/>
-    // And we want https://wikibase.world/w/api.php
     wiki.actionApi = (() => {
         let actionApiMatches = wiki.responseText.match(/<link rel="EditURI" type="application\/rsd\+xml" href="(.+?)"/)
         if (actionApiMatches) {
@@ -121,65 +113,84 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         }
         return null
     })();
-    // Look for <title>HandWiki</title> in the responseText
-    wiki.title = wiki.responseText.match(/<title>(.+?)<\/title>/)[1]
-    // Also look for <meta name="description" content="Wiki Encyclopedia of Knowledge"/>
-    const descriptionMatch = wiki.responseText.match(/<meta name="description" content="(.+?)"/);
-    wiki.metaDescription = descriptionMatch ? descriptionMatch[1] : undefined
-    // Also look for <meta name="generator" content="MediaWiki 1.38.4"/>
-    wiki.metaGenerator = wiki.responseText.match(/<meta name="generator" content="(.+?)"/)[1]
-    wiki.mwVersion = wiki.metaGenerator.match(/MediaWiki (.+?)$/)[1]
-    // language from "wgPageContentLanguage":"en"
-    const languageMatch = wiki.responseText.match(/"wgPageContentLanguage":"(.+?)"/)
-    wiki.language = languageMatch ? languageMatch[1] : 'en'
-
-    // Lookup P53 (wikibase metadata ID), and thus the data from the metadata site
-    if (wiki.simpleClaims.P53) {
-        wiki.wbmetadata = await metadatalookup(wiki.simpleClaims.P53)
+    // Lookup additional known infomation from the loaded main page meta data
+    {
+        // Look for <title>HandWiki</title> in the responseText
+        wiki.title = wiki.responseText.match(/<title>(.+?)<\/title>/)[1]
+        // Also look for <meta name="description" content="Wiki Encyclopedia of Knowledge"/>
+        const descriptionMatch = wiki.responseText.match(/<meta name="description" content="(.+?)"/);
+        wiki.metaDescription = descriptionMatch ? descriptionMatch[1] : undefined
+        // Also look for <meta name="generator" content="MediaWiki 1.38.4"/>
+        wiki.metaGenerator = wiki.responseText.match(/<meta name="generator" content="(.+?)"/)[1]
+        wiki.mwVersion = wiki.metaGenerator.match(/MediaWiki (.+?)$/)[1]
+        // language from "wgPageContentLanguage":"en"
+        const languageMatch = wiki.responseText.match(/"wgPageContentLanguage":"(.+?)"/)
+        wiki.language = languageMatch ? languageMatch[1] : 'en'
     }
 
-    // Lookup external links used in the item and property namespace :D
-    // https://wikifcd.wikibase.cloud/w/api.php?action=query&list=exturlusage&euprotocol=https&eulimit=500&eunamespace=120|122&euprop=url
-    wiki.urlDomains = new Set();
-    let loops = 0;
-    const limitExternalLinkLoops = 350;
-    // Ignore these, as we don't really want to do the links for them
-    const ignoreUrlLookupDomains = [
-        'www.wikidata.org',
-        'wikibase.world',
-        'wikibase-registry.wmflabs.org',
-        'commons.wikimedia.org',
-    ]
-    // TODO skip this if the starting URL we started with redirected to another domain (like registry to wikibase.world)
-    if (wiki.actionApi && !ignoreUrlLookupDomains.includes(new URL(wiki.actionApi).hostname)) {
-        let continueToken = '';
-        do {
-            loops++;
-            let externalLinksUrl = wiki.actionApi + `?format=json&action=query&list=exturlusage&euprotocol=https&eulimit=500&eunamespace=120|122&euprop=url`;
-            if (continueToken) {
-                externalLinksUrl += `&eucontinue=${continueToken}`;
-            }
-            try {
-                const externalLinksResponse = await fetchc(externalLinksUrl, { headers: HEADERS }).then(res => res.json());
-                externalLinksResponse.query.exturlusage.forEach(link => {
-                    try {
-                        const domain = new URL(link.url).hostname;
-                        wiki.urlDomains.add(domain);
-                    } catch (e) {
-                        console.log(`❌ Failed to parse URL ${link.url}`);
-                    }
-                });
-                continueToken = externalLinksResponse.continue ? externalLinksResponse.continue.eucontinue : '';
-            } catch (e) {
-                console.log(`❌ Failed to get the external links for ${wiki.site}` + e);
-                break;
-            }
-        } while (continueToken && loops < limitExternalLinkLoops); // Only try 100 loops?
+    // Lookup the item for the site on wikibase.world
+    {
+        const { entities } = await fetchuc(world.sdk.getEntities({ids: [ wiki.item ]}), { headers: HEADERS }).then(res => res.json())
+        wiki.entity = entities[wiki.item]
+        wiki.simpleClaims = simplifyClaims(wiki.entity.claims)
     }
-    if (loops >= limitExternalLinkLoops) {
-        console.log(`❌ Too many loops for external links for ${wiki.site}`); // If we hit this, we might have to come up with another method? maybe search? OR looking domain by domain for known domains?
+
+    // Based on the item, lookup some additional stuff
+    {
+        // Lookup P53 (wikibase metadata ID), and thus the data from the metadata site
+        if (wiki.simpleClaims[worldWikibseMetadataId]) {
+            if (wiki.simpleClaims[worldWikibseMetadataId].length > 1) {
+                console.log(`❌ The item ${wiki.item} has more than 1 P53 claim`)
+            } else {
+                wiki.wbmetadata = await metadatalookup(wiki.simpleClaims[worldWikibseMetadataId])
+            }
+        }
     }
-    wiki.urlDomains = [...wiki.urlDomains]; // Convert Set to Array if needed
+
+    {
+        // Lookup external links used in the item and property namespace :D
+        // https://wikifcd.wikibase.cloud/w/api.php?action=query&list=exturlusage&euprotocol=https&eulimit=500&eunamespace=120|122&euprop=url
+        wiki.urlDomains = new Set();
+        let loops = 0;
+        const limitExternalLinkLoops = 350;
+        // Ignore these, as we don't really want to do the links for them
+        const ignoreUrlLookupDomains = [
+            'www.wikidata.org',
+            'wikibase.world',
+            'wikibase-registry.wmflabs.org',
+            'commons.wikimedia.org',
+        ]
+        // TODO skip this if the starting URL we started with redirected to another domain (like registry to wikibase.world)
+        if (wiki.actionApi && !ignoreUrlLookupDomains.includes(new URL(wiki.actionApi).hostname)) {
+            let continueToken = '';
+            do {
+                loops++;
+                let externalLinksUrl = wiki.actionApi + `?format=json&action=query&list=exturlusage&euprotocol=https&eulimit=500&eunamespace=120|122&euprop=url`;
+                if (continueToken) {
+                    externalLinksUrl += `&eucontinue=${continueToken}`;
+                }
+                try {
+                    const externalLinksResponse = await fetchc(externalLinksUrl, { headers: HEADERS }).then(res => res.json());
+                    externalLinksResponse.query.exturlusage.forEach(link => {
+                        try {
+                            const domain = new URL(link.url).hostname;
+                            wiki.urlDomains.add(domain);
+                        } catch (e) {
+                            console.log(`❌ Failed to parse URL ${link.url}`);
+                        }
+                    });
+                    continueToken = externalLinksResponse.continue ? externalLinksResponse.continue.eucontinue : '';
+                } catch (e) {
+                    console.log(`❌ Failed to get the external links for ${wiki.site}` + e);
+                    break;
+                }
+            } while (continueToken && loops < limitExternalLinkLoops); // Only try 100 loops?
+        }
+        if (loops >= limitExternalLinkLoops) {
+            console.log(`❌ Too many loops for external links for ${wiki.site}`); // If we hit this, we might have to come up with another method? maybe search? OR looking domain by domain for known domains?
+        }
+        wiki.urlDomains = [...wiki.urlDomains]; // Convert Set to Array if needed
+    }
 
     // lookup manifest if it is on
     // w/rest.php/wikibase-manifest/v0/
@@ -198,138 +209,137 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     wiki.wdEquivProps = wiki.wbManifestData && wiki.wbManifestData.equiv_entities && wiki.wbManifestData.equiv_entities['wikidata.org'] ? wiki.wbManifestData.equiv_entities['wikidata.org'].properties : []
     wiki.wdEquivFormatterUrlProp = wiki.wdEquivProps ? wiki.wdEquivProps.P1630 : undefined
 
-    // TODO dont do if wdEquivFormatterUrlProp is not set
-    const sparqlFormatterURLPropertyData = await (async () => {
-        // TODO, dont just use domain in this query, look it up from manifest
-        const sparqlQuery = `
-        PREFIX wdt: <https://${wiki.domain}/prop/direct/>
-        PREFIX wd: <https://${wiki.domain}/entity/>
-        SELECT ?property ?formatter WHERE {
-        ?property wdt:${wiki.wdEquivFormatterUrlProp} ?formatter.
-        }
-        `
-        const url = `https://${wiki.domain}/query/sparql?format=json&query=${encodeURIComponent(sparqlQuery)}`
+    // Lookup the formatter URLs of any known formatter URL properties
+    {
+        const sparqlFormatterURLPropertyData = await (async () => {
+            // TODO, dont just use domain in this query, look it up from manifest
+            const sparqlQuery = `
+            PREFIX wdt: <https://${wiki.domain}/prop/direct/>
+            PREFIX wd: <https://${wiki.domain}/entity/>
+            SELECT ?property ?formatter WHERE {
+            ?property wdt:${wiki.wdEquivFormatterUrlProp} ?formatter.
+            }
+            `
+            const url = `https://${wiki.domain}/query/sparql?format=json&query=${encodeURIComponent(sparqlQuery)}`
+            try {
+                const raw = await fetchc(url, { headers: HEADERS }).then(res => res.json())
+                return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
+            } catch (e) {
+                console.log(`❌ Failed to get the formatter URL property data for ${wiki.site}`)
+                return []
+            }
+        })();
+    
+        // Find all domains for sparqlFormatterURLPropertyData
+        wiki.formattedExternalIdDomains = []
         try {
-            const raw = await fetchc(url, { headers: HEADERS }).then(res => res.json())
-            return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
+            wiki.formattedExternalIdDomains = sparqlFormatterURLPropertyData.map(data => new URL(data.formatter).hostname)
         } catch (e) {
-            console.log(`❌ Failed to get the formatter URL property data for ${wiki.site}`)
-            return []
+            // Some formatter "urls" are just $1 for example...
+            console.log(`❌ Failed to get the domains for the formatter URL property data for ${wiki.site}`)
         }
-    })();
-
-    // Find all domains for sparqlFormatterURLPropertyData
-    wiki.formattedExternalIdDomains = []
-    try {
-        wiki.formattedExternalIdDomains = sparqlFormatterURLPropertyData.map(data => new URL(data.formatter).hostname)
-    } catch (e) {
-        // Some formatter "urls" are just $1 for example...
-        console.log(`❌ Failed to get the domains for the formatter URL property data for ${wiki.site}`)
     }
 
     ////////////////////////////////
     // Start processing now we know stuff
     ////////////////////////////////
 
-    // check if they are known wikibases in wikibase.world
-    const knownDomains = [...new Set([...wiki.urlDomains, ...wiki.formattedExternalIdDomains])].filter(domain => worldWikiDomains.includes(domain))
-    const knownDomainQids = knownDomains.map(domain => {
-        let index = worldWikiDomains.indexOf(domain)
-        return worldWikiItems[index]
-    })
-    // if they are known, and we have a qid, then we can add a claim to the world item
-    knownDomainQids.forEach(qid => {
-        // Skip things linking to themselves
-        if (qid == wiki.item) {
-            return
-        }
-        // Skip anything linked from => wikibase.world, wikibase-registry
-        if (wiki.item == 'Q3' || wiki.item == 'Q58') {
-            return
-        }
-        world.queueWork.claimEnsure(queues.four, { id: wiki.item, property: worldLinksToWikibase, value: qid }, { summary: `Add [[Property:${worldLinksToWikibase}]] via "External Identifiers" and "URLs" to [[Item:${qid}]]` })
-        world.queueWork.claimEnsure(queues.four, { id: qid, property: worldLinkedFromWikibase, value: wiki.item }, { summary: `Add [[Property:${worldLinkedFromWikibase}]] via "External Identifiers" and "URLs" from [[Item:${wiki.item}]]` })
-    })
-    // If we accidently said Q56(linked from) -> Q3(wikibase.world) in the past, then remove them
-    if (wiki.simpleClaims.P56 && wiki.simpleClaims.P56.includes('Q3')) {
-        world.queueWork.claimRemove(queues.four, { id: wiki.item, property: worldLinkedFromWikibase, value: 'Q3' }, { summary: `Remove [[Property:${worldLinkedFromWikibase}]] from [[Item:Q3]] (as this would be far too verbose)` })
-    }
-    // Same for wikibase registry *facepalm*
-    if (wiki.simpleClaims.P56 && wiki.simpleClaims.P56.includes('Q58')) {
-        world.queueWork.claimRemove(queues.four, { id: wiki.item, property: worldLinkedFromWikibase, value: 'Q58' }, { summary: `Remove [[Property:${worldLinkedFromWikibase}]] from [[Item:Q58]] (as this would be far too verbose)` })
+    // Find all domains that we link to via either 1) formatted external identifiers, or 2) URLs
+    // If those domains in turn are already known on wikibase.world, then add statements to the world items linking them together
+    {
+        const knownDomains = [...new Set([...wiki.urlDomains, ...wiki.formattedExternalIdDomains])].filter(domain => worldWikiDomains.includes(domain))
+        const knownDomainQids = knownDomains.map(domain => {
+            let index = worldWikiDomains.indexOf(domain)
+            return worldWikiItems[index]
+        })
+        // if they are known, and we have a qid, then we can add a claim to the world item
+        knownDomainQids.forEach(qid => {
+            // Skip things linking to themselves
+            if (qid == wiki.item) {
+                return
+            }
+            // Skip anything linked from => wikibase.world, wikibase-registry
+            if (wiki.item == 'Q3' || wiki.item == 'Q58') {
+                return
+            }
+            world.queueWork.claimEnsure(queues.four, { id: wiki.item, property: worldLinksToWikibase, value: qid }, { summary: `Add [[Property:${worldLinksToWikibase}]] via "External Identifiers" and "URLs" to [[Item:${qid}]]` })
+            world.queueWork.claimEnsure(queues.four, { id: qid, property: worldLinkedFromWikibase, value: wiki.item }, { summary: `Add [[Property:${worldLinkedFromWikibase}]] via "External Identifiers" and "URLs" from [[Item:${wiki.item}]]` })
+        })
     }
 
-    // Figure out label and alias changes
-    let probablyGoodLabels = []
-    if (wiki.title) {
-        probablyGoodLabels.push(wiki.title)
-    }
-
-    if (wiki.language === 'en') {
-
-        // Figure out what we have
-        probablyGoodLabels.push(wiki.domain)
-        // Remove "Main Page - " from any of the starts of the probablyGoodLabels
-        probablyGoodLabels = probablyGoodLabels.map(label => label.replace('Main Page - ', ''))
-        // Remove any that still inclyude Main Page
-        probablyGoodLabels = probablyGoodLabels.filter(label => !label.includes('Main Page'))
-        // Remove any that is wikibase-docker
-        probablyGoodLabels = probablyGoodLabels.filter(label => !label.includes('wikibase-docker'))
-        // And make it unique and remove any empty strings
-        probablyGoodLabels = [...new Set(probablyGoodLabels)].filter(label => label !== '')
-
-        // Figure out the current state
-        let allEnLabelsAndAliases = []
-        let enLabelIsDomain = false
-        if (wiki.entity.labels.en) {
-            allEnLabelsAndAliases.push(wiki.entity.labels.en.value)
-            if (wiki.entity.labels.en.value === wiki.domain) {
-                enLabelIsDomain = true
-            }
-        }
-        if (wiki.entity.aliases.en) {
-            wiki.entity.aliases.en.forEach(alias => {
-                allEnLabelsAndAliases.push(alias.value)
-            });
+    // Try to modify labels descriptions and alias to the best of our ability
+    // Figure out what we have, add what we think we could, try to use a good label, and if we have to, use the domain
+    {
+        let probablyGoodLabels = []
+        if (wiki.title) {
+            probablyGoodLabels.push(wiki.title)
         }
 
-        // If one of the aliases starts with "Main Page - ", then remove it
-        // This is a temporary fix, after I added some bad titles
-        allEnLabelsAndAliases.forEach(alias => {
-            if (alias.startsWith('Main Page - ')) {
-                world.queueWork.aliasRemove(queues.one, { id: wiki.item, language: 'en', value: alias }, { summary: `Remove en alias "Main Page - " as its a bad alias` })
-            }
-        });
+        if (wiki.language === 'en') {
+            // Figure out what we have
+            probablyGoodLabels.push(wiki.domain)
+            // Remove "Main Page - " from any of the starts of the probablyGoodLabels
+            probablyGoodLabels = probablyGoodLabels.map(label => label.replace('Main Page - ', ''))
+            // Remove any that still inclyude Main Page
+            probablyGoodLabels = probablyGoodLabels.filter(label => !label.includes('Main Page'))
+            // Remove any that is wikibase-docker
+            probablyGoodLabels = probablyGoodLabels.filter(label => !label.includes('wikibase-docker'))
+            // And make it unique and remove any empty strings
+            probablyGoodLabels = [...new Set(probablyGoodLabels)].filter(label => label !== '')
 
-        // Find what is missing
-        let missingLabels = probablyGoodLabels.filter(label => !allEnLabelsAndAliases.includes(label))
-        // if there are missing labels
-        if (missingLabels.length > 0) {
-            // if the label is already the domain, then remove it from entity.labels.en, and add it to the missingLabels
-            // This effectively swaps the domain for a better label that we now might have (if we are doing an edit)
-            if (enLabelIsDomain) {
-                wiki.entity.labels.en = undefined
-                missingLabels.push(wiki.domain)
+            // Figure out the current state
+            let allEnLabelsAndAliases = []
+            let enLabelIsDomain = false
+            if (wiki.entity.labels.en) {
+                allEnLabelsAndAliases.push(wiki.entity.labels.en.value)
+                if (wiki.entity.labels.en.value === wiki.domain) {
+                    enLabelIsDomain = true
+                }
             }
-            // if there is no label, set the first thing there
-            if (!wiki.entity.labels.en) {
-                // TODO write tests for figuring out labels and aliases before running this, ALSO this probably needs to happen in a single edit due to async
-                // world.queueWork.labelSet(queues.one, { id: wiki.item, language: 'en', value: missingLabels[0] }, { summary: `Add en label from known infomation` })
-                // and remove it from the list
-                missingLabels.shift()
-            }
-            // if there are still missing labels, add them as aliases
-            if (missingLabels.length > 0) {
-                missingLabels.forEach(missingLabel => {
-                    // TODO write tests for figuring out labels and aliases before running this, ALSO this probably needs to happen in a single edit due to async
-                    // world.queueWork.aliasAdd(queues.one, { id: wiki.item, language: 'en', value: missingLabel }, { summary: `Add en alias from known infomation` })
+            if (wiki.entity.aliases.en) {
+                wiki.entity.aliases.en.forEach(alias => {
+                    allEnLabelsAndAliases.push(alias.value)
                 });
             }
-        }
 
-        // If there is no en description, then set it
-        if (wiki.metaDescription && !wiki.entity.descriptions.en) {
-            world.queueWork.descriptionSet(queues.one, { id: wiki.item, language: 'en', value: wiki.metaDescription }, { summary: `Add en description from Main Page HTML` })
+            // If one of the aliases starts with "Main Page - ", then remove it
+            // This is a temporary fix, after I added some bad titles
+            allEnLabelsAndAliases.forEach(alias => {
+                if (alias.startsWith('Main Page - ')) {
+                    world.queueWork.aliasRemove(queues.one, { id: wiki.item, language: 'en', value: alias }, { summary: `Remove en alias "Main Page - " as its a bad alias` })
+                }
+            });
+
+            // Find what is missing
+            let missingLabels = probablyGoodLabels.filter(label => !allEnLabelsAndAliases.includes(label))
+            // if there are missing labels
+            if (missingLabels.length > 0) {
+                // if the label is already the domain, then remove it from entity.labels.en, and add it to the missingLabels
+                // This effectively swaps the domain for a better label that we now might have (if we are doing an edit)
+                if (enLabelIsDomain) {
+                    wiki.entity.labels.en = undefined
+                    missingLabels.push(wiki.domain)
+                }
+                // if there is no label, set the first thing there
+                if (!wiki.entity.labels.en) {
+                    // TODO write tests for figuring out labels and aliases before running this, ALSO this probably needs to happen in a single edit due to async
+                    // world.queueWork.labelSet(queues.one, { id: wiki.item, language: 'en', value: missingLabels[0] }, { summary: `Add en label from known infomation` })
+                    // and remove it from the list
+                    missingLabels.shift()
+                }
+                // if there are still missing labels, add them as aliases
+                if (missingLabels.length > 0) {
+                    missingLabels.forEach(missingLabel => {
+                        // TODO write tests for figuring out labels and aliases before running this, ALSO this probably needs to happen in a single edit due to async
+                        // world.queueWork.aliasAdd(queues.one, { id: wiki.item, language: 'en', value: missingLabel }, { summary: `Add en alias from known infomation` })
+                    });
+                }
+            }
+
+            // If there is no en description, then set it
+            if (wiki.metaDescription && !wiki.entity.descriptions.en) {
+                world.queueWork.descriptionSet(queues.one, { id: wiki.item, language: 'en', value: wiki.metaDescription }, { summary: `Add en description from Main Page HTML` })
+            }
         }
     }
 
