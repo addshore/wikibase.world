@@ -29,8 +29,8 @@ const specialPages = [
     // "ItemByTitle",
     // "ItemDisambiguation",
     // "ItemsWithoutSitelinks",
-    "ListDatatypes", // 3 good
-    "ListProperties", //3 good
+    // "ListDatatypes", // 3 good
+    // "ListProperties", //3 good
     // "MergeItems",
     // "MyLanguageFallbackChain",
     "NewItem", // 1 good
@@ -78,6 +78,8 @@ const domainsToIgnore = [
     "wikimedia.de",
     "readthedocs.io",
     "amazonaws.com",
+    "mail-archive.com",
+    "youtube.com",
     "wikibase.cloud", // As we have an API for that :)
 ];
 
