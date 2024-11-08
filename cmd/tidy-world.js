@@ -490,7 +490,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                 const statistics = siteInfoApiResponse.query.statistics
                 if (statistics) {
                     if (!wiki.simpleClaims.P62) {
-                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P62', value: { amount: statistics.pages } }, { summary: `Add [[Property:P62]] claim for ${statistics.pages} based on the number of pages in the wiki (mediawiki statistics)` })
+                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P62', value: statistics.pages }, { summary: `Add [[Property:P62]] claim for ${statistics.pages} based on the number of pages in the wiki (mediawiki statistics)` })
                     } else {
                         // If there is more than 1 P62 claim
                         if (wiki.simpleClaims.P62.length > 1) {
@@ -499,12 +499,12 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                             // If the value is different, update it
                             if (wiki.simpleClaims.P62[0] !== statistics.pages) {
                                 // TODO account for qualifiers and references?
-                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P62', oldValue: wiki.simpleClaims.P62[0], newValue: { amount: statistics.pages } }, { summary: `Update [[Property:P62]] claim for ${statistics.pages} based on the number of pages in the wiki (mediawiki statistics)` })
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P62', oldValue: wiki.simpleClaims.P62[0], newValue: statistics.pages }, { summary: `Update [[Property:P62]] claim for ${statistics.pages} based on the number of pages in the wiki (mediawiki statistics)` })
                             }
                         }
                     }
                     if (!wiki.simpleClaims.P59) {
-                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P59', value: { amount: statistics.edits } }, { summary: `Add [[Property:P59]] claim for ${statistics.edits} based on the number of edits in the wiki (mediawiki statistics)` })
+                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P59', value: statistics.edits }, { summary: `Add [[Property:P59]] claim for ${statistics.edits} based on the number of edits in the wiki (mediawiki statistics)` })
                     } else {
                         // If there is more than 1 P59 claim
                         if (wiki.simpleClaims.P59.length > 1) {
@@ -513,12 +513,12 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                             // If the value is different, update it
                             if (wiki.simpleClaims.P59[0] !== statistics.edits) {
                                 // TODO account for qualifiers and references?
-                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P59', oldValue: wiki.simpleClaims.P59[0], newValue: { amount: statistics.edits } }, { summary: `Update [[Property:P59]] claim for ${statistics.edits} based on the number of edits in the wiki (mediawiki statistics)` })
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P59', oldValue: wiki.simpleClaims.P59[0], newValue: statistics.edits }, { summary: `Update [[Property:P59]] claim for ${statistics.edits} based on the number of edits in the wiki (mediawiki statistics)` })
                             }
                         }
                     }
                     if (!wiki.simpleClaims.P60) {
-                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P60', value: { amount: statistics.users } }, { summary: `Add [[Property:P60]] claim for ${statistics.users} based on the number of users in the wiki (mediawiki statistics)` })
+                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P60', value: statistics.users }, { summary: `Add [[Property:P60]] claim for ${statistics.users} based on the number of users in the wiki (mediawiki statistics)` })
                     } else {
                         // If there is more than 1 P60 claim
                         if (wiki.simpleClaims.P60.length > 1) {
@@ -527,12 +527,12 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                             // If the value is different, update it
                             if (wiki.simpleClaims.P60[0] !== statistics.users) {
                                 // TODO account for qualifiers and references?
-                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P60', oldValue: wiki.simpleClaims.P60[0], newValue: { amount: statistics.users } }, { summary: `Update [[Property:P60]] claim for ${statistics.users} based on the number of users in the wiki (mediawiki statistics)` })
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P60', oldValue: wiki.simpleClaims.P60[0], newValue: statistics.users }, { summary: `Update [[Property:P60]] claim for ${statistics.users} based on the number of users in the wiki (mediawiki statistics)` })
                             }
                         }
                     }
                     if (!wiki.simpleClaims.P61) {
-                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P61', value: { amount: statistics.activeusers } }, { summary: `Add [[Property:P61]] claim for ${statistics.activeusers} based on the number of active users in the wiki (mediawiki statistics)` })
+                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P61', value: statistics.activeusers }, { summary: `Add [[Property:P61]] claim for ${statistics.activeusers} based on the number of active users in the wiki (mediawiki statistics)` })
                     } else {
                         // If there is more than 1 P61 claim
                         if (wiki.simpleClaims.P61.length > 1) {
@@ -541,7 +541,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                             // If the value is different, update it
                             if (wiki.simpleClaims.P61[0] !== statistics.activeusers) {
                                 // TODO account for qualifiers and references?
-                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P61', oldValue: wiki.simpleClaims.P61[0], newValue: { amount: statistics.activeusers } }, { summary: `Update [[Property:P61]] claim for ${statistics.activeusers} based on the number of active users in the wiki (mediawiki statistics)` })
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P61', oldValue: wiki.simpleClaims.P61[0], newValue: statistics.activeusers }, { summary: `Update [[Property:P61]] claim for ${statistics.activeusers} based on the number of active users in the wiki (mediawiki statistics)` })
                             }
                         }
                     }
@@ -589,7 +589,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
 
                 // P58 is the "number of properties" property
                 if (!wiki.simpleClaims.P58) {
-                    world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P58', value: { amount: allPagesSoFar } }, { summary: `Add [[Property:P58]] claim for ${allPagesSoFar} based on the number of properties in the property namespace` })
+                    world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P58', value: allPagesSoFar }, { summary: `Add [[Property:P58]] claim for ${allPagesSoFar} based on the number of properties in the property namespace` })
                 } else {
                     // If there is more than 1 P58 claim
                     if (wiki.simpleClaims.P58.length > 1) {
@@ -598,7 +598,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                         // If the value is different, update it
                         if (wiki.simpleClaims.P58[0] !== allPagesSoFar) {
                             // TODO account for qualifiers and references?
-                            world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P58', oldValue: wiki.simpleClaims.P58[0], newValue: { amount: allPagesSoFar } }, { summary: `Update [[Property:P58]] claim for ${allPagesSoFar} based on the number of properties in the property namespace` })
+                            world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P58', oldValue: wiki.simpleClaims.P58[0], newValue: allPagesSoFar }, { summary: `Update [[Property:P58]] claim for ${allPagesSoFar} based on the number of properties in the property namespace` })
                         }
                     }
                 }
