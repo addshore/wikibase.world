@@ -37,4 +37,42 @@ const checkOnlineAndWikibase = async (url) => {
     }
 }
 
-export { checkOnlineAndWikibase };
+/**
+ * Get the number of pages in the property namespace
+ * 
+ * @param {string} actionApi
+ * @param {number} propertyNamespaceId
+ * @param {number} limit 
+ * @returns {number|null}
+ */
+const actionApigetPageCount = async (actionApi, propertyNamespaceId, limit) => {
+    let allPagesSoFar = 0;
+    let retrievingPages = true;
+    let extraPagigParams = '';
+    do {
+        const allPagesApiUrl = `${actionApi}?action=query&list=allpages&apnamespace=${propertyNamespaceId}&aplimit=500&format=json${extraPagigParams}`;
+        const allPagesApiResponse = await fetchc(allPagesApiUrl, { headers: HEADERS }).then(res => res.json());
+        if (allPagesApiResponse.warnings) {
+            console.log(`❌ Failed to get the number of properties`);
+            console.log(allPagesApiResponse.warnings);
+            return null;
+        }
+        allPagesSoFar += allPagesApiResponse.query.allpages.length;
+        if (allPagesApiResponse.continue) {
+            const continueToken = allPagesApiResponse.continue.apcontinue;
+            extraPagigParams = `&apcontinue=${continueToken}`;
+        } else {
+            retrievingPages = false;
+        }
+        if (allPagesSoFar > limit) {
+            console.log(`❌ The item has more than ${limit} properties`);
+            return null;
+        }
+    } while (retrievingPages);
+    return allPagesSoFar;
+};
+
+export {
+    checkOnlineAndWikibase,
+    actionApigetPageCount,
+};

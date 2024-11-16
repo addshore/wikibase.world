@@ -3,6 +3,7 @@ import { fetchuc, fetchc } from './../src/fetch.js';
 import { world } from './../src/world.js';
 import { queues, ee, HEADERS } from './../src/general.js';
 import { metadatalookup } from './../src/metadata.js'
+import { actionApigetPageCount } from './../src/site.js'
 import { simplifySparqlResults, minimizeSimplifiedSparqlResults } from 'wikibase-sdk'
 import dns from 'dns'
 
@@ -39,15 +40,22 @@ ee.on('world.wikis', (result) => {
     // TODO order wikis with highest Qid first
     queues.many.add(async () => {
         const url = result.site
-        try{
+        try {
             const response = await fetchc(url, { headers: HEADERS })
-            const responseText = await response.text();
+            const responseText = await response.text()
             response.loadedText = responseText
-            if (response.status == 200 || ( response.status === 404 && responseText.includes("There is currently no text in this page") ) ) {
-                ee.emit('world.wikis.alive', { wiki: result, response: response })
-            } else {
-                console.log(`❌ The URL ${url} is not currently a 200 or a 404 with the expected text`)
+            const finalUrl = response.url
+
+            if (new URL(finalUrl).hostname !== new URL(url).hostname) {
+                console.log(`❌ The URL ${url} redirected to a different domain: ${finalUrl}`)
                 return
+            }
+
+            if (response.status == 200 || (response.status === 404 && responseText.includes("There is currently no text in this page"))) {
+            ee.emit('world.wikis.alive', { wiki: result, response: response })
+            } else {
+            console.log(`❌ The URL ${url} is not currently a 200 or a 404 with the expected text`)
+            return
             }
         } catch (e) {
             console.log(`❌ The URL ${url} is not currently a 200`)
@@ -69,7 +77,6 @@ const worldLinksToWikibase = 'P55'
 const worldLinkedFromWikibase = 'P56'
 
 ee.on('world.wikis.alive', async ({ wiki, response }) => {
-
     // First, a very basic check to see if the URL we retrieved is a MediaWiki, otherwise just RUN AWAY!
     wiki.responseText = response.loadedText
     if (!wiki.responseText.includes('content="MediaWiki')) {
@@ -487,6 +494,11 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                 // also query.statistics.activeusers (P61)
                 // Add them all to the item
 
+                const shouldNumberyUpdateClaim = function(oldValue, newValue) {
+                    const logDifference = Math.abs(Math.log10(newValue) - Math.log10(oldValue));
+                    return logDifference >= 0.5;
+                }
+
                 const statistics = siteInfoApiResponse.query.statistics
                 if (statistics) {
                     if (!wiki.simpleClaims.P62) {
@@ -496,8 +508,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                         if (wiki.simpleClaims.P62.length > 1) {
                             console.log(`❌ The item ${wiki.item} has more than 1 P62 claim`)
                         } else {
-                            // If the value is different, update it
-                            if (wiki.simpleClaims.P62[0] !== statistics.pages) {
+                            if (shouldNumberyUpdateClaim(wiki.simpleClaims.P62[0], statistics.pages)) {
                                 // TODO account for qualifiers and references?
                                 world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P62', oldValue: wiki.simpleClaims.P62[0], newValue: statistics.pages }, { summary: `Update [[Property:P62]] claim for ${statistics.pages} based on the number of pages in the wiki (mediawiki statistics)` })
                             }
@@ -510,8 +521,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                         if (wiki.simpleClaims.P59.length > 1) {
                             console.log(`❌ The item ${wiki.item} has more than 1 P59 claim`)
                         } else {
-                            // If the value is different, update it
-                            if (wiki.simpleClaims.P59[0] !== statistics.edits) {
+                            if (shouldNumberyUpdateClaim(wiki.simpleClaims.P59[0], statistics.edits)) {
                                 // TODO account for qualifiers and references?
                                 world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P59', oldValue: wiki.simpleClaims.P59[0], newValue: statistics.edits }, { summary: `Update [[Property:P59]] claim for ${statistics.edits} based on the number of edits in the wiki (mediawiki statistics)` })
                             }
@@ -524,8 +534,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                         if (wiki.simpleClaims.P60.length > 1) {
                             console.log(`❌ The item ${wiki.item} has more than 1 P60 claim`)
                         } else {
-                            // If the value is different, update it
-                            if (wiki.simpleClaims.P60[0] !== statistics.users) {
+                            if (shouldNumberyUpdateClaim(wiki.simpleClaims.P60[0], statistics.users)) {
                                 // TODO account for qualifiers and references?
                                 world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P60', oldValue: wiki.simpleClaims.P60[0], newValue: statistics.users }, { summary: `Update [[Property:P60]] claim for ${statistics.users} based on the number of users in the wiki (mediawiki statistics)` })
                             }
@@ -538,8 +547,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                         if (wiki.simpleClaims.P61.length > 1) {
                             console.log(`❌ The item ${wiki.item} has more than 1 P61 claim`)
                         } else {
-                            // If the value is different, update it
-                            if (wiki.simpleClaims.P61[0] !== statistics.activeusers) {
+                            if (shouldNumberyUpdateClaim(wiki.simpleClaims.P61[0], statistics.activeusers)) {
                                 // TODO account for qualifiers and references?
                                 world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P61', oldValue: wiki.simpleClaims.P61[0], newValue: statistics.activeusers }, { summary: `Update [[Property:P61]] claim for ${statistics.activeusers} based on the number of active users in the wiki (mediawiki statistics)` })
                             }
@@ -553,52 +561,21 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                     return
                 }
 
-                const pageLoopLimit = 20 * 500
-                let allPagesSoFar = 0
-                let retrievingPages = true
-                let extraPagigParams = ''
-                // loop while retrievingPages is true
-                do {
-                    const allPagesApiUrl = wiki.actionApi + '?action=query&list=allpages&apnamespace=' + propertyNamespaceId + '&aplimit=500&format=json' + extraPagigParams
-                    const allPagesApiResponse = await fetchc(allPagesApiUrl, { headers: HEADERS }).then(res => res.json())
-                    // if there is a warning key in the response, bail
-                    if (allPagesApiResponse.warnings) {
-                        console.log(`❌ Failed to get the number of properties for ${wiki.site}`)
-                        console.log(allPagesApiResponse.warnings)
-                        return
-                    }
-                    allPagesSoFar += allPagesApiResponse.query.allpages.length
-                    // if there is a continue key in the response, bail
-                    if (allPagesApiResponse.continue) {
-                        // "batchcomplete": "",
-                        // "continue": {
-                        //     "apcontinue": "P10",
-                        //     "continue": "-||"
-                        // },
-                        // do the same request again, but with the apcontinue parameter,
-                        const continueToken = allPagesApiResponse.continue.apcontinue
-                        extraPagigParams = '&apcontinue=' + continueToken
+                const propertyCount = await actionApigetPageCount(wiki.actionApi, propertyNamespaceId, 20 * 500);
+                if (propertyCount){
+                    // P58 is the "number of properties" property
+                    if (!wiki.simpleClaims.P58) {
+                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P58', value: propertyCount }, { summary: `Add [[Property:P58]] claim for ${propertyCount} based on the number of properties in the property namespace` })
                     } else {
-                        retrievingPages = false
-                    }
-                    if (allPagesSoFar > pageLoopLimit) {
-                        console.log(`❌ The item ${wiki.item} has more than ${pageLoopLimit} properties`)
-                        return
-                    }
-                } while (retrievingPages)
-
-                // P58 is the "number of properties" property
-                if (!wiki.simpleClaims.P58) {
-                    world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P58', value: allPagesSoFar }, { summary: `Add [[Property:P58]] claim for ${allPagesSoFar} based on the number of properties in the property namespace` })
-                } else {
-                    // If there is more than 1 P58 claim
-                    if (wiki.simpleClaims.P58.length > 1) {
-                        console.log(`❌ The item ${wiki.item} has more than 1 P58 claim`)
-                    } else {
-                        // If the value is different, update it
-                        if (wiki.simpleClaims.P58[0] !== allPagesSoFar) {
-                            // TODO account for qualifiers and references?
-                            world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P58', oldValue: wiki.simpleClaims.P58[0], newValue: allPagesSoFar }, { summary: `Update [[Property:P58]] claim for ${allPagesSoFar} based on the number of properties in the property namespace` })
+                        // If there is more than 1 P58 claim
+                        if (wiki.simpleClaims.P58.length > 1) {
+                            console.log(`❌ The item ${wiki.item} has more than 1 P58 claim`)
+                        } else {
+                            // If the value is different, update it
+                            if (shouldNumberyUpdateClaim(wiki.simpleClaims.P58[0], propertyCount)) {
+                                // TODO account for qualifiers and references?
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P58', oldValue: wiki.simpleClaims.P58[0], newValue: propertyCount }, { summary: `Update [[Property:P58]] claim for ${propertyCount} based on the number of properties in the property namespace` })
+                            }
                         }
                     }
                 }
