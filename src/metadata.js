@@ -32,7 +32,7 @@ let metadatalookup = async (id) => {
         query: generateQuery(id),
     }
     let headers = HEADERS
-    // add json content type hearder
+    // add json content type header
     headers['Content-Type'] = 'application/json'
     let options = {
         method: 'POST',
@@ -40,7 +40,13 @@ let metadatalookup = async (id) => {
         body: JSON.stringify(postData),
     }
     const response = await fetchc(graphqlURL, options)
-    const data = await response.json()
+    let data;
+    try {
+        data = await response.json();
+    } catch (error) {
+        console.error("Failed to parse JSON response:", error);
+        return undefined;
+    }
     if (!data || !data.data || !data.data.wikibase) {
         return undefined
     }
