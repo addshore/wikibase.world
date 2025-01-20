@@ -16,6 +16,8 @@ if (scriptFilter != undefined) {
     console.log(`🚀 Running with script filter: ${scriptFilter}`)
 }
 
+let doesNotExistCount = 0;
+
 // Start at 1, and go until the data is null
 queues.many.add(async () => {
     let i = 1
@@ -26,7 +28,14 @@ queues.many.add(async () => {
         let metadatadata = await metadatalookup(i)
         if (!metadatadata) {
             console.log(`❌ The wikibase ${i} does not exist`)
+            doesNotExistCount++;
+            if (doesNotExistCount >= 50) {
+                console.log(`❌ Reached 50 consecutive "does not exist" messages. Exiting...`)
+                process.exit(0);
+            }
             continue
+        } else {
+            doesNotExistCount = 0;
         }
 
         const wbURL = metadatadata.urls.baseUrl
