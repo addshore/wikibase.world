@@ -53,8 +53,12 @@ const world = {
         },
         descriptionSet: async (queue, data, requestConfig) => {
             queue.add(async () => {
-                console.log(`🖊️ Setting description for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`)
-                await worldEdit.description.set(data, requestConfig)
+            if (data.value.length > 250) {
+                console.warn(`⚠️ Description for ${data.id} in ${data.language} is too long (${data.value.length} characters): ${requestConfig.summary}`)
+                return
+            }
+            console.log(`🖊️ Setting description for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`)
+            await worldEdit.description.set(data, requestConfig)
             });
         },
         aliasAdd: async (queue, data, requestConfig) => {
