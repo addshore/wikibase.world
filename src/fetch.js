@@ -7,21 +7,50 @@ const fetchCachedInternal = NodeFetchCache.create({
     }),
 });
 const fetchuc = async (url, options) => {
-    // console.log(`🚀 Fetching ${url} (uncached)`)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 100000);
     try {
-        return await fetch(url, { ...options, signal: controller.signal });
+        let response;
+        do {
+            response = await fetch(url, { ...options, signal: controller.signal });
+            if (response.status === 429) {
+                console.log('↩️⏸️ 429 Too Many Requests, retrying in 10 seconds for fetchuc url:', url);
+                await new Promise(resolve => setTimeout(resolve, 10000)); //60s
+                console.log('↩️ Retrying now for fetchuc url:', url);
+            }
+        } while (response.status === 429);
+        return response;
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            console.error('Fetch aborted for fetchuc url:', url);
+        } else {
+            console.error('Fetch error for fetchuc url:', url, error);
+        }
     } finally {
         clearTimeout(timeoutId);
     }
 }
+
 const fetchc = async (url, options) => {
-    // console.log(`🚀 Fetching ${url} (caching)`)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 100000);
     try {
-        return await fetchCachedInternal(url, { ...options, signal: controller.signal });
+        let response;
+        do {
+            response = await fetchCachedInternal(url, { ...options, signal: controller.signal });
+            if (response.status === 429) {
+                console.log('↩️⏸️ 429 Too Many Requests, retrying in 10 seconds for fetchc url:', url);
+                await new Promise(resolve => setTimeout(resolve, 10000)); //60s
+                console.log('↩️ Retrying now for fetchc url:', url);
+            }
+        } while (response.status === 429);
+        return response;
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            console.error('Fetch aborted for fetchc url:', url);
+        } else {
+            console.error('Fetch error for fetchc url:', url, error);
+        }
     } finally {
         clearTimeout(timeoutId);
     }

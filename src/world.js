@@ -33,6 +33,24 @@ const worldEdit = WBEdit({
     bot: true,
 })
 
+// Function that retries the callback in 10 seconds if we catch any error that says "429 Too Many Requests"
+const retryIn60If429 = async (callback, name) => {
+    try {
+        return await callback()
+    } catch (error) {
+        if (error.message.includes('429 Too Many Requests')) {
+            console.log(`↩️⏸️ 429 Too Many Requests in world callback, retrying in 10 seconds for ` + name)
+            await new Promise(resolve => setTimeout(resolve, 10000))
+            console.log('↩️ Retrying now for ' + name)
+            return await retryIn60If429(callback)
+        } else if (error.name === 'AbortError') {
+            console.error('Fetch aborted for ' + name)
+        } else {
+            throw error
+        }
+    }
+}
+
 const world = {
     sdk: worldSDK,
     edit: worldEdit,
@@ -41,60 +59,69 @@ const world = {
         itemCreate: async (queue, data, requestConfig) => {
             data.type = 'item'
             queue.add(async () => {
-                console.log(`🖊️ Creating item: ${requestConfig.summary}`)
-                await worldEdit.entity.create(data, requestConfig)
+                const logText = `🖊️ Creating item: ${requestConfig.summary}`
+                console.log(logText)
+                await retryIn60If429(() => worldEdit.entity.create(data, requestConfig), logText)
             });
         },
         labelSet: async (queue, data, requestConfig) => {
             queue.add(async () => {
-                console.log(`🖊️ Setting label for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`)
-                await worldEdit.label.set(data, requestConfig)
+                const logText = `🖊️ Setting label for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`
+                console.log(logText)
+                await retryIn60If429(() => worldEdit.label.set(data, requestConfig), logText)
             });
         },
         descriptionSet: async (queue, data, requestConfig) => {
             queue.add(async () => {
-            if (data.value.length > 250) {
-                console.warn(`⚠️ Description for ${data.id} in ${data.language} is too long (${data.value.length} characters): ${requestConfig.summary}`)
-                return
-            }
-            console.log(`🖊️ Setting description for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`)
-            await worldEdit.description.set(data, requestConfig)
+                if (data.value.length > 250) {
+                    console.warn(`⚠️ Description for ${data.id} in ${data.language} is too long (${data.value.length} characters): ${requestConfig.summary}`)
+                    return
+                }
+                const logText = `🖊️ Setting description for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`
+                console.log(logText)
+                await retryIn60If429(() => worldEdit.description.set(data, requestConfig), logText)
             });
         },
         aliasAdd: async (queue, data, requestConfig) => {
             queue.add(async () => {
-                console.log(`🖊️ Adding alias for ${data.id} in ${data.language} as ${data.value}: ${requestConfig.summary}`)
-                await worldEdit.alias.add(data, requestConfig)
+                const logText = `🖊️ Adding alias for ${data.id} in ${data.language} as ${data.value}: ${requestConfig.summary}`
+                console.log(logText)
+                await retryIn60If429(() => worldEdit.alias.add(data, requestConfig), logText)
             });
         },
         aliasRemove: async (queue, data, requestConfig) => {
             queue.add(async () => {
-                console.log(`🖊️ Removing alias for ${data.id} in ${data.language} as ${data.value}: ${requestConfig.summary}`)
-                await worldEdit.alias.remove(data, requestConfig)
+                const logText = `🖊️ Removing alias for ${data.id} in ${data.language} as ${data.value}: ${requestConfig.summary}`
+                console.log(logText)
+                await retryIn60If429(() => worldEdit.alias.remove(data, requestConfig), logText)
             });
         },
         claimUpdate: async (queue, data, requestConfig) => {
             queue.add(async () => {
-                console.log(`🖊️ Updating claim for ${data.id} with ${data.property} from ${data.oldValue} to ${data.newValue}: ${requestConfig.summary}`)
-                await worldEdit.claim.update(data, requestConfig)
+                const logText = `🖊️ Updating claim for ${data.id} with ${data.property} from ${data.oldValue} to ${data.newValue}: ${requestConfig.summary}`
+                console.log(logText)
+                await retryIn60If429(() => worldEdit.claim.update(data, requestConfig), logText)
             });
         },
         claimCreate: async (queue, data, requestConfig) => {
             queue.add(async () => {
-                console.log(`🖊️ Creating claim for ${data.id} with ${data.property} as ${data.value}: ${requestConfig.summary}`)
-                await worldEdit.claim.create(data, requestConfig)
+                const logText = `🖊️ Creating claim for ${data.id} with ${data.property} as ${data.value}: ${requestConfig.summary}`
+                console.log(logText)
+                await retryIn60If429(() => worldEdit.claim.create(data, requestConfig), logText)
             });
         },
         claimRemove: async (queue, data, requestConfig) => {
             queue.add(async () => {
-                console.log(`🖊️ Removing claim for ${data.id} with ${data.property} as ${data.value}: ${requestConfig.summary}`)
-                await worldEdit.claim.remove(data, requestConfig)
+                const logText = `🖊️ Removing claim for ${data.id} with ${data.property} as ${data.value}: ${requestConfig.summary}`
+                console.log(logText)
+                await retryIn60If429(() => worldEdit.claim.remove(data, requestConfig), logText)
             });
         },
         referenceSet: async (queue, data, requestConfig) => {
             queue.add(async () => {
-                console.log(`🖊️ Setting reference for ${data.guid}: ${requestConfig.summary}`)
-                await worldEdit.reference.set(data, requestConfig)
+                const logText = `🖊️ Setting reference for ${data.guid}: ${requestConfig.summary}`
+                console.log(logText)
+                await retryIn60If429(() => worldEdit.reference.set(data, requestConfig), logText)
             });
         },
     }
@@ -121,7 +148,12 @@ world.queueWork.claimEnsure = async (queue, data, requestConfig) => {
     queue.add(async () => {
         // Get the entity from data.id
         const url = world.sdk.getEntities({ids: [ data.id ]})
-        const { entities } = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
+        const response = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
+        if (!response || !response.entities) {
+            console.error(`❌ Failed to fetch entities for ${data.id}: ${requestConfig.summary}`)
+            return
+        }
+        const { entities } = response
         const simpleClaims = simplifyClaims(entities[data.id].claims)
         // TODO we run away from qualifiers for now? :D
         let hasClaimWithValue = false

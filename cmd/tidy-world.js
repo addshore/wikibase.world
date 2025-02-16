@@ -137,7 +137,18 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
 
     // Lookup the item for the site on wikibase.world
     {
-        const { entities } = await fetchuc(world.sdk.getEntities({ids: [ wiki.item ]}), { headers: HEADERS }).then(res => res.json())
+        const { entities } = await fetchuc(world.sdk.getEntities({ids: [ wiki.item ]}), { headers: HEADERS }).then(
+            res => {
+                if (res) {
+                    return res.json()
+                }
+                return { entities: {} }
+            }
+        )
+        if (!entities[wiki.item]) {
+            console.log(`❌ The item ${wiki.item} does not exist`)
+            return
+        }
         wiki.entity = entities[wiki.item]
         wiki.simpleClaims = simplifyClaims(wiki.entity.claims)
     }
