@@ -3,7 +3,7 @@ import { fetchuc, fetchc } from './../src/fetch.js';
 import { world } from './../src/world.js';
 import { queues, ee, HEADERS } from './../src/general.js';
 import { metadatalookup } from './../src/metadata.js'
-import { actionApigetPageCount } from './../src/site.js'
+import { actionApigetPageCount, actionAPIgetMaxEntityIdInt } from './../src/site.js'
 import { simplifySparqlResults, minimizeSimplifiedSparqlResults } from 'wikibase-sdk'
 import dns from 'dns'
 
@@ -36,10 +36,10 @@ queues.many.add(async () => {
 });
 
 // Listen for the 'world.wikis' event and queue a check for each wiki
-ee.on('world.wikis', (result) => {
+ee.on('world.wikis', (wiki) => {
     // TODO order wikis with highest Qid first
     queues.many.add(async () => {
-        const url = result.site
+        const url = wiki.site
         try {
             const response = await fetchc(url, { headers: HEADERS })
             const responseText = await response.text()
@@ -51,11 +51,15 @@ ee.on('world.wikis', (result) => {
                 return
             }
 
+            wiki.url = url
+            wiki.responseText = response.loadedText
+            wiki.domain = wiki.site.replace('https://', '').replace('http://', '').split('/')[0]
+
             if (response.status == 200 || (response.status === 404 && responseText.includes("There is currently no text in this page"))) {
-            ee.emit('world.wikis.alive', { wiki: result, response: response })
+                ee.emit('world.wikis.alive', { wiki: wiki, response: response })
             } else {
-            console.log(`❌ The URL ${url} is not currently a 200 or a 404 with the expected text`)
-            return
+                ee.emit('world.wikis.maybedead', { wiki: wiki, response: response })
+                return
             }
         } catch (e) {
             console.log(`❌ The URL ${url} is not currently a 200`)
@@ -76,15 +80,17 @@ const worldWikibseMetadataId = 'P53'
 const worldLinksToWikibase = 'P55'
 const worldLinkedFromWikibase = 'P56'
 
+ee.on('world.wikis.maybedead', async ({ wiki, response }) => {
+    console.log(`❌ The URL ${wiki.url} is not currently a 200 or a 404 with the expected text (maybe dead)`)
+});
+
 ee.on('world.wikis.alive', async ({ wiki, response }) => {
     // First, a very basic check to see if the URL we retrieved is a MediaWiki, otherwise just RUN AWAY!
-    wiki.responseText = response.loadedText
     if (!wiki.responseText.includes('content="MediaWiki')) {
         console.log(`❌ The URL ${wiki.site} is not a MediaWiki, aborting for now...`)
         return
     }
 
-    wiki.domain = wiki.site.replace('https://', '').replace('http://', '').split('/')[0]
     wiki.reverseDNS = await new Promise((resolve, reject) => {
         dns.lookup(wiki.domain, (err, address, family) => {
             if (err) {
@@ -489,21 +495,12 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                 console.log(`❌ Failed to get the inception date for ${wiki.site}`)
             }
         });
-        // Try to figure out the number of properties based on the API listing pages in the "extepected" property namespace
+        
+        // Figure out a bunch of stuff that we can figure out from the siteinfo, and futher requests
         queues.many.add(async () => {
-            // api.php?action=query&list=allpages&apnamespace=122&aplimit=5000
             try{
-                // First, find the property namespace..
-                // do api.php?action=query&meta=siteinfo&siprop=namespaces
-                // and find the namespace with "defaultcontentmodel" or "wikibase-property"
                 const siteInfoApiUrl = wiki.actionApi + '?action=query&meta=siteinfo&siprop=namespaces|statistics&format=json'
                 const siteInfoApiResponse = await fetchc(siteInfoApiUrl, { headers: HEADERS }).then(res => res.json())
-
-                // Look for query.statistics.pages (P62)
-                // also query.statistics.edits (P59)
-                // also query.statistics.users (P60)
-                // also query.statistics.activeusers (P61)
-                // Add them all to the item
 
                 const shouldNumberyUpdateClaim = function(oldValue, newValue) {
                     const logDifference = Math.abs(Math.log10(newValue) - Math.log10(oldValue));
@@ -574,30 +571,56 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                 const propertyNamespaceId = Object.keys(siteInfoApiResponse.query.namespaces).find(key => siteInfoApiResponse.query.namespaces[key].defaultcontentmodel === 'wikibase-property')
                 if (!propertyNamespaceId) {
                     console.log(`❌ Failed to find the property namespace for ${wiki.site}`)
-                    return
-                }
-
-                const propertyCount = await actionApigetPageCount(wiki.actionApi, propertyNamespaceId, 20 * 500);
-                if (propertyCount){
-                    // P58 is the "number of properties" property
-                    if (!wiki.simpleClaims.P58) {
-                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P58', value: propertyCount }, { summary: `Add [[Property:P58]] claim for ${propertyCount} based on the number of properties in the property namespace` })
-                    } else {
-                        // If there is more than 1 P58 claim
-                        if (wiki.simpleClaims.P58.length > 1) {
-                            console.log(`❌ The item ${wiki.item} has more than 1 P58 claim`)
+                } else {
+                    const propertyCount = await actionApigetPageCount(wiki.actionApi, propertyNamespaceId, 20 * 500);
+                    if (propertyCount){
+                        // P58 is the "number of properties" property
+                        if (!wiki.simpleClaims.P58) {
+                            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P58', value: propertyCount }, { summary: `Add [[Property:P58]] claim for ${propertyCount} based on the number of properties in the property namespace` })
                         } else {
-                            // If the value is different, update it
-                            if (shouldNumberyUpdateClaim(wiki.simpleClaims.P58[0], propertyCount)) {
-                                // TODO account for qualifiers and references?
-                                const delta = propertyCount - wiki.simpleClaims.P58[0];
-                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P58', oldValue: wiki.simpleClaims.P58[0], newValue: propertyCount }, { summary: `Update [[Property:P58]] claim from ${wiki.simpleClaims.P58[0]} to ${propertyCount} (delta: ${delta}) based on the number of properties in the property namespace` })
+                            // If there is more than 1 P58 claim
+                            if (wiki.simpleClaims.P58.length > 1) {
+                                console.log(`❌ The item ${wiki.item} has more than 1 P58 claim`)
+                            } else {
+                                // If the value is different, update it
+                                if (shouldNumberyUpdateClaim(wiki.simpleClaims.P58[0], propertyCount)) {
+                                    // TODO account for qualifiers and references?
+                                    const delta = propertyCount - wiki.simpleClaims.P58[0];
+                                    world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P58', oldValue: wiki.simpleClaims.P58[0], newValue: propertyCount }, { summary: `Update [[Property:P58]] claim from ${wiki.simpleClaims.P58[0]} to ${propertyCount} (delta: ${delta}) based on the number of properties in the property namespace` })
+                                }
                             }
                         }
                     }
                 }
+
+                const itemNamespaceId = Object.keys(siteInfoApiResponse.query.namespaces).find(key => siteInfoApiResponse.query.namespaces[key].defaultcontentmodel === 'wikibase-item')
+                if (!itemNamespaceId) {
+                    console.log(`❌ Failed to find the item namespace for ${wiki.site}`)
+                } else {
+                    const maxItemIdInt = await actionAPIgetMaxEntityIdInt(wiki.actionApi, itemNamespaceId);
+                    if (maxItemIdInt){
+                        // P67 is the "max item id" property
+                        if (!wiki.simpleClaims.P67) {
+                            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P67', value: maxItemIdInt }, { summary: `Add [[Property:P67]] claim for ${maxItemIdInt} based on the last created item` })
+                        } else {
+                            // If there is more than 1 P67 claim
+                            if (wiki.simpleClaims.P67.length > 1) {
+                                console.log(`❌ The item ${wiki.item} has more than 1 P67 claim`)
+                            } else {
+                                // If the value is different, update it
+                                if (shouldNumberyUpdateClaim(wiki.simpleClaims.P67[0], maxItemIdInt)) {
+                                    // TODO account for qualifiers and references?
+                                    const delta = maxItemIdInt - wiki.simpleClaims.P67[0];
+                                    world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P67', oldValue: wiki.simpleClaims.P67[0], newValue: maxItemIdInt }, { summary: `Update [[Property:P67]] claim from ${wiki.simpleClaims.P67[0]} to ${maxItemIdInt} (delta: ${delta}) based on the last created item` })
+                                }
+                            }
+                        }
+                    }
+                }
+
             } catch (e) {
                 console.log(`❌ Failed to get the number of properties, users, stats etc for ${wiki.site}`)
+                console.log(e)
             }
         });
     }

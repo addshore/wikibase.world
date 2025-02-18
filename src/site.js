@@ -72,7 +72,46 @@ const actionApigetPageCount = async (actionApi, propertyNamespaceId, limit) => {
     return allPagesSoFar;
 };
 
+const actionAPIgetMaxEntityIdInt = async (actionApi, namespaceId) => {
+    // https://wikibase.world/w/api.php?action=query&list=logevents&lenamespace=120&letype=create&lelimit=1&leprop=title
+    const allPagesApiUrl = `${actionApi}?action=query&list=logevents&lenamespace=${namespaceId}&letype=create&lelimit=1&leprop=title&format=json`;
+    // Returns something like this, showing the last page in the namespace that was created
+    // {
+    //     "batchcomplete": "",
+    //     "continue": {
+    //         "lecontinue": "20250218122546|3036",
+    //         "continue": "-||"
+    //     },
+    //     "query": {
+    //         "logevents": [
+    //             {
+    //                 "ns": 120,
+    //                 "title": "Item:Q1543"
+    //             }
+    //         ]
+    //     }
+    // }
+    const allPagesApiResponse = await fetchc(allPagesApiUrl, { headers: HEADERS }).then(res => res.json());
+    if (allPagesApiResponse.warnings) {
+        console.log(`❌ Failed to get the number of properties`);
+        console.log(allPagesApiResponse.warnings);
+        return null;
+    }
+    if (allPagesApiResponse.query.logevents.length === 0) {
+        return 0; // There are not yet any items!
+    }
+    let lastEntity = allPagesApiResponse.query.logevents[0].title;
+    // It may or may not have a namespace prefix, so remove anything before :
+    if (lastEntity.includes(':')) {
+        lastEntity = lastEntity.split(':')[1];
+    }
+    // Then just crudely match digits
+    const lastEntityIdInt = lastEntity.match(/\d+/)[0];
+    return lastEntityIdInt;
+}
+
 export {
     checkOnlineAndWikibase,
     actionApigetPageCount,
+    actionAPIgetMaxEntityIdInt,
 };
