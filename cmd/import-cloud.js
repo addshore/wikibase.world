@@ -1,3 +1,4 @@
+import { simplifyClaims } from 'wikibase-sdk'
 import { fetchuc, fetchc } from './../src/fetch.js';
 import { world } from './../src/world.js';
 import { queues, ee, HEADERS } from './../src/general.js';
@@ -13,15 +14,27 @@ queues.many.add(async () => {
     const url = "https://www.wikibase.cloud/api/wiki?sort=pages&direction=desc&is_active=1&page=1&per_page=99999";
     const response = await fetchuc(url);
     const data = await response.json();
+    // Make sure that the per_page element matches 99999
+    if (data.meta.per_page != 99999) {
+        console.log(`❌ The per_page element in the response is not 99999, it is ${data.meta.per_page}`)
+        return
+    }
+    // And make sure that the to element is 99999 or less
+    if (data.meta.to > 99999) {
+        console.log(`❌ The to element in the response is greater than 99999, it is ${data.meta.to}`)
+        return
+    }
+    // So we probably have ALL the wikibase.cloud wikis, and they didn't change the API limits etc on us
     const wikis = data.data;
 
-    // sort the wikis by id, desc
+    // sort the wikis by id, desc (so newest first)
     wikis.sort((a, b) => b.id - a.id)
 
     const worldWikis = await world.sparql.wikis();
     const worldWikiURLs = worldWikis.map(wiki => wiki.site)
     const worldWikiItems = worldWikis.map(wiki => wiki.item)
 
+    // Add wikibase.cloud wikis that don't yet exist
     wikis.forEach(async wiki => {
         if (scriptFilter != undefined && !wiki.domain.includes(scriptFilter)) {
             return
@@ -67,6 +80,46 @@ queues.many.add(async () => {
 
         });
 
+    });
+
+    // Mark deleted wikibase.cloud wikis as permanently offline
+    worldWikis.forEach(async wiki => {
+        if (scriptFilter != undefined && !wiki.site.includes(scriptFilter)) {
+            return
+        }
+
+        if (!wikis.some(wiki => wiki.domain.includes(wiki.site))) {
+
+            // Lookup the item for the site on wikibase.world
+            const { entities } = await fetchuc(world.sdk.getEntities({ ids: [wiki.item] }), { headers: HEADERS }).then(
+                res => {
+                    if (res) {
+                        return res.json();
+                    }
+                    return { entities: {} };
+                }
+            );
+            if (!entities[wiki.item]) {
+                console.log(`❌ The item ${wiki.item} does not exist`);
+                return;
+            }
+            wiki.entity = entities[wiki.item];
+            wiki.simpleClaims = simplifyClaims(wiki.entity.claims);
+
+            // Check if there is a P13 claim
+            if (wiki.simpleClaims.P13 && wiki.simpleClaims.P13.length > 0) {
+                // If there is more than 1 P13 claim
+                if (wiki.simpleClaims.P13.length > 1) {
+                    console.log(`❌ The item ${wiki.item} has more than 1 P13 claim`)
+                } else {
+                    // Update the P13 claim to Q57
+                    world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P13', oldValue: wiki.simpleClaims.P13[0], newValue: 'Q57' }, { summary: `Update [[Property:P13]] claim to [[Item:Q57]] for a deleted wikibase.cloud Wikibase` })
+                }
+            } else {
+                // Add the P13 claim with value Q57
+                world.queueWork.claimAdd(queues.one, { id: wiki.item, property: 'P13', value: 'Q57' }, { summary: `Add [[Property:P13]] claim with value [[Item:Q57]] for a deleted wikibase.cloud Wikibase` })
+            }
+        }
     });
 });
 
