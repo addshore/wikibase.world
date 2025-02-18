@@ -372,7 +372,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
             // If the version is different, update it
             if (wiki.simpleClaims.P57[0] !== wiki.mwVersion) {
                 // TODO account for qualifiers and references?
-                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P57', oldValue: wiki.simpleClaims.P57[0], newValue: wiki.mwVersion }, { summary: `Update [[Property:P57]] claim for ${wiki.mwVersion}, extracted from home page meta data` })
+                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P57', oldValue: wiki.simpleClaims.P57[0], newValue: wiki.mwVersion }, { summary: `Update [[Property:P57]] claim from ${wiki.simpleClaims.P57[0]} to ${wiki.mwVersion}, extracted from home page meta data` })
             }
         }
     }
@@ -513,7 +513,8 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                 const statistics = siteInfoApiResponse.query.statistics
                 if (statistics) {
                     if (!wiki.simpleClaims.P62) {
-                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P62', value: statistics.pages }, { summary: `Add [[Property:P62]] claim for ${statistics.pages} based on the number of pages in the wiki (mediawiki statistics)` })
+                        const delta = statistics.pages;
+                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P62', value: statistics.pages }, { summary: `Add [[Property:P62]] claim for ${statistics.pages} (delta: ${delta}) based on the number of pages in the wiki (mediawiki statistics)` })
                     } else {
                         // If there is more than 1 P62 claim
                         if (wiki.simpleClaims.P62.length > 1) {
@@ -521,7 +522,8 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                         } else {
                             if (shouldNumberyUpdateClaim(wiki.simpleClaims.P62[0], statistics.pages)) {
                                 // TODO account for qualifiers and references?
-                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P62', oldValue: wiki.simpleClaims.P62[0], newValue: statistics.pages }, { summary: `Update [[Property:P62]] claim for ${statistics.pages} based on the number of pages in the wiki (mediawiki statistics)` })
+                                const delta = statistics.pages - wiki.simpleClaims.P62[0];
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P62', oldValue: wiki.simpleClaims.P62[0], newValue: statistics.pages }, { summary: `Update [[Property:P62]] claim from ${wiki.simpleClaims.P62[0]} to ${statistics.pages} (delta: ${delta}) based on the number of pages in the wiki (mediawiki statistics)` })
                             }
                         }
                     }
@@ -534,7 +536,8 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                         } else {
                             if (shouldNumberyUpdateClaim(wiki.simpleClaims.P59[0], statistics.edits)) {
                                 // TODO account for qualifiers and references?
-                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P59', oldValue: wiki.simpleClaims.P59[0], newValue: statistics.edits }, { summary: `Update [[Property:P59]] claim for ${statistics.edits} based on the number of edits in the wiki (mediawiki statistics)` })
+                                const delta = statistics.edits - wiki.simpleClaims.P59[0];
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P59', oldValue: wiki.simpleClaims.P59[0], newValue: statistics.edits }, { summary: `Update [[Property:P59]] claim from ${wiki.simpleClaims.P59[0]} to ${statistics.edits} (delta: ${delta}) based on the number of edits in the wiki (mediawiki statistics)` })
                             }
                         }
                     }
@@ -547,7 +550,8 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                         } else {
                             if (shouldNumberyUpdateClaim(wiki.simpleClaims.P60[0], statistics.users)) {
                                 // TODO account for qualifiers and references?
-                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P60', oldValue: wiki.simpleClaims.P60[0], newValue: statistics.users }, { summary: `Update [[Property:P60]] claim for ${statistics.users} based on the number of users in the wiki (mediawiki statistics)` })
+                                const delta = statistics.users - wiki.simpleClaims.P60[0];
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P60', oldValue: wiki.simpleClaims.P60[0], newValue: statistics.users }, { summary: `Update [[Property:P60]] claim from ${wiki.simpleClaims.P60[0]} to ${statistics.users} (delta: ${delta}) based on the number of users in the wiki (mediawiki statistics)` })
                             }
                         }
                     }
@@ -560,7 +564,8 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                         } else {
                             if (shouldNumberyUpdateClaim(wiki.simpleClaims.P61[0], statistics.activeusers)) {
                                 // TODO account for qualifiers and references?
-                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P61', oldValue: wiki.simpleClaims.P61[0], newValue: statistics.activeusers }, { summary: `Update [[Property:P61]] claim for ${statistics.activeusers} based on the number of active users in the wiki (mediawiki statistics)` })
+                                const delta = statistics.activeusers - wiki.simpleClaims.P61[0];
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P61', oldValue: wiki.simpleClaims.P61[0], newValue: statistics.activeusers }, { summary: `Update [[Property:P61]] claim from ${wiki.simpleClaims.P61[0]} to ${statistics.activeusers} (delta: ${delta}) based on the number of active users in the wiki (mediawiki statistics)` })
                             }
                         }
                     }
@@ -585,7 +590,8 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                             // If the value is different, update it
                             if (shouldNumberyUpdateClaim(wiki.simpleClaims.P58[0], propertyCount)) {
                                 // TODO account for qualifiers and references?
-                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P58', oldValue: wiki.simpleClaims.P58[0], newValue: propertyCount }, { summary: `Update [[Property:P58]] claim for ${propertyCount} based on the number of properties in the property namespace` })
+                                const delta = propertyCount - wiki.simpleClaims.P58[0];
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P58', oldValue: wiki.simpleClaims.P58[0], newValue: propertyCount }, { summary: `Update [[Property:P58]] claim from ${wiki.simpleClaims.P58[0]} to ${propertyCount} (delta: ${delta}) based on the number of properties in the property namespace` })
                             }
                         }
                     }
