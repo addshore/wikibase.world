@@ -138,6 +138,7 @@ world.sparql.wikis = async () => {
       ?item wdt:P3 wd:Q10.  
       ?item wdt:P1 ?site.
       FILTER NOT EXISTS { ?item wdt:P13 wd:Q57 } # Ignore permanently offline instances
+      FILTER NOT EXISTS { ?item wdt:P13 wd:Q72 } # Ignore indefinitely offline instances
     }
     `
     const url = world.sdk.sparqlQuery(sparqlQuery)
