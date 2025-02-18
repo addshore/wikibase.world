@@ -31,6 +31,7 @@ queues.many.add(async () => {
     wikis.sort((a, b) => b.id - a.id)
 
     const worldWikis = await world.sparql.wikis();
+    const worldCloudWikis = await world.sparql.cloudWikis();
     const worldWikiURLs = worldWikis.map(wiki => wiki.site)
     const worldWikiItems = worldWikis.map(wiki => wiki.item)
 
@@ -83,12 +84,21 @@ queues.many.add(async () => {
     });
 
     // Mark deleted wikibase.cloud wikis as permanently offline
-    worldWikis.forEach(async wiki => {
+    // TODO maybe only query for the non deleted wikibase world cloud wikis?
+    worldCloudWikis.forEach(async wiki => {
         if (scriptFilter != undefined && !wiki.site.includes(scriptFilter)) {
             return
         }
 
-        if (!wikis.some(wiki => wiki.domain.includes(wiki.site))) {
+        // set wiki.domain, by removing the https:// and any path
+        wiki.domain = wiki.site.replace(/^https?:\/\//, '').split('/')[0]
+
+
+        const isWikiInList = wikis.some(w => w.domain.includes(wiki.domain));
+        console.log(`Site ${wiki.site} world list check, is in list: ${isWikiInList}`)
+        if (!isWikiInList) {
+            console.log(wiki.domain)
+            
 
             // Lookup the item for the site on wikibase.world
             const { entities } = await fetchuc(world.sdk.getEntities({ ids: [wiki.item] }), { headers: HEADERS }).then(
@@ -112,12 +122,16 @@ queues.many.add(async () => {
                 if (wiki.simpleClaims.P13.length > 1) {
                     console.log(`❌ The item ${wiki.item} has more than 1 P13 claim`)
                 } else {
-                    // Update the P13 claim to Q57
-                    world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P13', oldValue: wiki.simpleClaims.P13[0], newValue: 'Q57' }, { summary: `Update [[Property:P13]] claim to [[Item:Q57]] for a deleted wikibase.cloud Wikibase` })
+                    if (wiki.simpleClaims.P13[0] === 'Q57') {
+                        console.log(`❌ The item ${wiki.item} already has a P13 claim with value Q57`)
+                    } else {
+                        // Update the P13 claim to Q57
+                        world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P13', oldValue: wiki.simpleClaims.P13[0], newValue: 'Q57' }, { summary: `Update [[Property:P13]] claim to [[Item:Q57]] for a deleted [[Item:Q8]] Wikibase` })
+                    }
                 }
             } else {
                 // Add the P13 claim with value Q57
-                world.queueWork.claimAdd(queues.one, { id: wiki.item, property: 'P13', value: 'Q57' }, { summary: `Add [[Property:P13]] claim with value [[Item:Q57]] for a deleted wikibase.cloud Wikibase` })
+                world.queueWork.claimAdd(queues.one, { id: wiki.item, property: 'P13', value: 'Q57' }, { summary: `Add [[Property:P13]] claim with value [[Item:Q57]] for a deleted [[Item:Q8]] Wikibase` })
             }
         }
     });
