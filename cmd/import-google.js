@@ -1,7 +1,6 @@
 import { getJson } from 'serpapi';
 import { world } from './../src/world.js';
-import { fetchuc, fetchc } from './../src/fetch.js';
-import { queues, ee, HEADERS } from './../src/general.js';
+import { queues, ee } from './../src/general.js';
 import { checkOnlineAndWikibase } from './../src/site.js';
 import dotenv from 'dotenv'
 dotenv.config()
@@ -11,8 +10,8 @@ const serconfig = function(query) {
         engine: "google",
         api_key: process.env.SERPAPI_KEY,
         q: query,
-        // location: "Austin, Texas",
-        location: "Berlin,Berlin,Germany",
+        location: "Austin, Texas",
+        // location: "Berlin,Berlin,Germany",
         // location: "Hino,Tokyo,Japan",
         num: 100,
         nfpr: 1,
@@ -43,7 +42,7 @@ const specialPages = [
     // "SetSiteLink",
 ];
 
-// TODO do each special page seperately, and then a.so all of them together?
+// TODO do each special page separately, and then a.so all of them together?
 
 const domainsToIgnore = [
     "wikidata.org",
@@ -84,7 +83,7 @@ const domainsToIgnore = [
 ];
 
 const searchTerm = function() {
-    // creatime sometihng like...
+    // creatime something like...
     // ("specialPage[0]" OR specialPage[n]) -site:domainsToIgnore[0] -site:domainsToIgnore[n] etc...
     const pages = specialPages.map(page => `"Special:${page}"`).join(" OR ");
     const sites = domainsToIgnore.map(site => `-site:${site}`).join(" ");
@@ -119,7 +118,7 @@ domains.forEach(domain => {
     }
     // Check if the wiki is alive, one at a time so as to not overload cloud
     queues.four.add(async () => {
-        // Make sure it doesnt already exist, so make sure the domain doesnt appear in any of the strings in worldWikiURLs
+        // Make sure it doesn't already exist, so make sure the domain doesn't appear in any of the strings in worldWikiURLs
         if (worldWikiURLs.some(wikiURL => wikiURL.includes(domain))) {
             return
         }
