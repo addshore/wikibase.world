@@ -69,7 +69,7 @@ const actionApigetPageCount = async (actionApi, propertyNamespaceId, limit) => {
             return null;
         }
     } while (retrievingPages);
-    return allPagesSoFar;
+    return parseInt(allPagesSoFar);
 };
 
 const actionAPIgetMaxEntityIdInt = async (actionApi, namespaceId) => {
@@ -107,7 +107,7 @@ const actionAPIgetMaxEntityIdInt = async (actionApi, namespaceId) => {
     }
     // Then just crudely match digits
     const lastEntityIdInt = lastEntity.match(/\d+/)[0];
-    return lastEntityIdInt;
+    return parseInt(lastEntityIdInt);
 }
 
 export {
