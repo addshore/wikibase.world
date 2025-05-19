@@ -73,7 +73,7 @@ const REVERSE_CLOUD = "221.76.141.34.bc.googleusercontent.com";
 // const REVERSE_WBWIKI = "server-54-230-10-103.man50.r.cloudfront.net" // TODO check this one
 const REVERSE_WBWIKI = "server-108-138-217-36.lhr61.r.cloudfront.net"
 const REVERSE_WIKIMEDIA = "text-lb.esams.wikimedia.org"
-const REVERSE_WIKITIDE = "cp37.wikitide.net"
+const REVERSE_WIKITIDE = "cp37.wikitide.net" // wikitide is miraheze
 
 // Known world properties
 const worldWikibseMetadataId = 'P53'
@@ -449,7 +449,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     }
 
     // If the domain ends in wikibase.wiki
-    if (wiki.site.endsWith('.wikibase.wiki')) {
+    if (wiki.site.endsWith('.wikibase.wiki') || wiki.reverseDNS.includes(REVERSE_WBWIKI)) {
         // Then ensure P2 (Host) -> Q7 (The Wikibase Consultancy)
         if (!wiki.simpleClaims.P2 || wiki.simpleClaims.P2[0] !== 'Q7') {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P2', value: 'Q7' }, { summary: `Add [[Property:P2]] claim for [[Item:Q7]] based on [[Property:P1]] of ${wiki.site}` })
@@ -457,7 +457,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     }
 
     // If the domain ends in miraheze.org, then it is hosted by Q118
-    if (wiki.site.endsWith('.miraheze.org')) {
+    if (wiki.site.endsWith('.miraheze.org') || wiki.reverseDNS.includes(REVERSE_WIKITIDE)) {
         if (!wiki.simpleClaims.P2 || wiki.simpleClaims.P2[0] !== 'Q118') {
             world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P2', value: 'Q118' }, { summary: `Add [[Property:P2]] claim for [[Item:Q118]] based on [[Property:P1]] of ${wiki.site}` })
         }
