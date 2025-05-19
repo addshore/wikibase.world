@@ -197,7 +197,11 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                     const externalLinksResponse = await fetchc(externalLinksUrl, { headers: HEADERS }).then(res => res.json());
                     externalLinksResponse.query.exturlusage.forEach(link => {
                         try {
-                            const domain = new URL(link.url).hostname;
+                            let url = link.url;
+                            if (url.startsWith('//')) {
+                                url = 'https:' + url;
+                            }
+                            const domain = new URL(url).hostname;
                             wiki.urlDomains.add(domain);
                         } catch (e) {
                             console.log(`❌ Failed to parse URL ${link.url}`);
