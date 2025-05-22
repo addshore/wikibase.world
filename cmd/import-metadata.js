@@ -6,7 +6,7 @@ import { metadatalookup } from './../src/metadata.js'
 import dotenv from 'dotenv'
 dotenv.config()
 
-const worldWikis = await world.sparql.wikis();
+const worldWikis = await world.sparql.wikisAll();
 const worldWikiURLs = worldWikis.map(wiki => wiki.site)
 const worldWikiItems = worldWikis.map(wiki => wiki.item)
 

@@ -130,6 +130,23 @@ const world = {
 /**
  * @returns {Array<{item: string, site: string}>}
  */
+world.sparql.wikisAll = async () => {
+    const sparqlQuery = `
+    PREFIX wdt: <https://wikibase.world/prop/direct/>
+    PREFIX wd: <https://wikibase.world/entity/>
+    SELECT ?item ?site WHERE {
+      ?item wdt:P3 wd:Q10.  
+      ?item wdt:P1 ?site.
+    }
+    `
+    const url = world.sdk.sparqlQuery(sparqlQuery)
+    const raw = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
+    return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
+}
+
+/**
+ * @returns {Array<{item: string, site: string}>}
+ */
 world.sparql.wikis = async () => {
     const sparqlQuery = `
     PREFIX wdt: <https://wikibase.world/prop/direct/>
