@@ -3,7 +3,7 @@ import { fetchuc, fetchc } from './../src/fetch.js';
 import { world } from './../src/world.js';
 import { queues, ee, HEADERS } from './../src/general.js';
 import { metadatalookup } from './../src/metadata.js'
-import { actionApigetPageCount, actionAPIgetMaxEntityIdInt } from './../src/site.js'
+import { actionApigetPageCount, actionAPIgetMaxEntityIdInt, hasHostedByProfessionalWikiLogo } from './../src/site.js'
 import { simplifySparqlResults, minimizeSimplifiedSparqlResults } from 'wikibase-sdk'
 import dns from 'dns'
 
@@ -448,11 +448,20 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         // console.log(wiki.domain + " -> " + wiki.reverseDNS)
     }
 
-    // If the domain ends in wikibase.wiki
-    if (wiki.site.endsWith('.wikibase.wiki') || wiki.reverseDNS.includes(REVERSE_WBWIKI)) {
+    // If the domain ends in wikibase.wiki, or reverse DNS matches, or professional hosting image is present
+    let reasonForQ7 = '';
+    if (wiki.site.endsWith('.wikibase.wiki')) {
+        reasonForQ7 = 'based on .wikibase.wiki domain';
+    } else if (wiki.reverseDNS.includes(REVERSE_WBWIKI)) {
+        reasonForQ7 = 'based on reverse DNS match';
+    } else if (await hasHostedByProfessionalWikiLogo(wiki.url, wiki.responseText)) {
+        reasonForQ7 = 'based on footer image presence';
+    }
+
+    if (reasonForQ7) {
         // Then ensure P2 (Host) -> Q7 (The Wikibase Consultancy)
         if (!wiki.simpleClaims.P2 || wiki.simpleClaims.P2[0] !== 'Q7') {
-            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P2', value: 'Q7' }, { summary: `Add [[Property:P2]] claim for [[Item:Q7]] based on [[Property:P1]] of ${wiki.site}` })
+            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P2', value: 'Q7' }, { summary: `Add [[Property:P2]] claim for [[Item:Q7]] ${reasonForQ7}` });
         }
     }
 

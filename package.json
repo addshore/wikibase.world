@@ -8,5 +8,8 @@
     "serpapi": "^2.1.0",
     "wikibase-edit": "^7.2.3",
     "wikibase-sdk": "^10.2.1"
+  },
+  "scripts": {
+    "test": "find test -name '*.test.js' -print0 | xargs -0 node"
   }
 }

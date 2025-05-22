@@ -114,4 +114,21 @@ export {
     checkOnlineAndWikibase,
     actionApigetPageCount,
     actionAPIgetMaxEntityIdInt,
+    hasHostedByProfessionalWikiLogo,
 };
+
+async function hasHostedByProfessionalWikiLogo(url, responseText = null) {
+    try {
+        let htmlContent = responseText;
+        if (htmlContent === null) {
+            const response = await fetchc(url, { headers: HEADERS });
+            htmlContent = await response.text();
+        }
+        return htmlContent.includes('w/images/HostedByProfessionalWiki.png');
+    } catch (error) {
+        // If responseText was provided, this error is likely from includes() if htmlContent is not a string,
+        // or if an error occurs during fetchc if responseText was null.
+        console.error(`Error processing URL ${url} for Professional Wiki check:`, error);
+        return false;
+    }
+}
