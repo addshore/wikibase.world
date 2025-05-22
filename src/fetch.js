@@ -31,7 +31,8 @@ const fetchuc = async (url, options) => {
     }
 }
 
-const fetchc = async (url, options) => {
+// Original fetchc implementation
+const originalFetchc = async (url, options) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 100000);
     try {
@@ -54,6 +55,19 @@ const fetchc = async (url, options) => {
     } finally {
         clearTimeout(timeoutId);
     }
-}
+};
 
-export { fetchuc, fetchc };
+// currentFetchc initially points to the original implementation
+let currentFetchc = originalFetchc;
+
+// Exported fetchc that will be used by other modules
+const fetchc = async (url, options) => {
+    return currentFetchc(url, options);
+};
+
+// Exported function to set a mock implementation for fetchc
+const setMockFetchc = (mockFunction) => {
+    currentFetchc = mockFunction;
+};
+
+export { fetchuc, fetchc, setMockFetchc };
