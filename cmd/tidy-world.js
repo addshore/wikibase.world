@@ -132,7 +132,12 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         wiki.title = wiki.responseText.match(/<title>(.+?)<\/title>/)[1]
         // Also look for <meta name="description" content="Wiki Encyclopedia of Knowledge"/>
         const descriptionMatch = wiki.responseText.match(/<meta name="description" content="(.+?)"/);
-        wiki.metaDescription = descriptionMatch ? descriptionMatch[1] : undefined
+        if (descriptionMatch && descriptionMatch[1].length >= 4) {
+            // Remove HTML entities from the description
+            wiki.metaDescription = descriptionMatch[1].replace(/&#(\d+);/g, (m, code) => String.fromCharCode(code)).replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+        } else {
+            wiki.metaDescription = undefined;
+        }
         // Also look for <meta name="generator" content="MediaWiki 1.38.4"/>
         wiki.metaGenerator = wiki.responseText.match(/<meta name="generator" content="(.+?)"/)[1]
         wiki.mwVersion = wiki.metaGenerator.match(/MediaWiki (.+?)$/)[1]
@@ -388,9 +393,9 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
     }
 
     // If the item does not have a P13 claim, then ensure P13 -> Q54, as the site appears online
-    // Note this doesnt change the claim, as redirects are followed, and might result in a site appearing online when it is not, such as wikibase-registry
+    // Note this doesn't change the claim, as redirects are followed, and might result in a site appearing online when it is not, such as wikibase-registry
     if (!wiki.simpleClaims.P13 ) {
-        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P13', value: 'Q54' }, { summary: `Add [[Property:P13]] claim for [[Item:Q54]] based on the fact it respondes with a 200 of MediaWiki` })
+        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P13', value: 'Q54' }, { summary: `Add [[Property:P13]] claim for [[Item:Q54]] based on the fact it responds with a 200 of MediaWiki` })
     }
 
     // If the domain ends in .wikibase.cloud
