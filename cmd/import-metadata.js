@@ -1,9 +1,9 @@
 import { world } from './../src/world.js';
-import { fetchuc, fetchc } from './../src/fetch.js';
-import { queues, ee, HEADERS } from './../src/general.js';
+import { queues, ee } from './../src/general.js';
 import { checkOnlineAndWikibase } from './../src/site.js';
 import { metadatalookup } from './../src/metadata.js'
 import dotenv from 'dotenv'
+import process from 'process';
 dotenv.config()
 
 const worldWikis = await world.sparql.wikisAll();

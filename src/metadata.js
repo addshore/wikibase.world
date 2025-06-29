@@ -1,5 +1,5 @@
-import { queues, ee, HEADERS } from './../src/general.js';
-import { fetchuc, fetchc } from './../src/fetch.js';
+import { fetchc } from './../src/fetch.js';
+import { HEADERS } from './../src/general.js';
 
 let graphqlURL = "https://wikibase-metadata.toolforge.org/graphql"
 const generateQuery = (id) => {
@@ -31,7 +31,7 @@ let metadatalookup = async (id) => {
         operationName: "MyQuery",
         query: generateQuery(id),
     }
-    let headers = HEADERS
+    let headers = HEADERS;
     // add json content type header
     headers['Content-Type'] = 'application/json'
     let options = {

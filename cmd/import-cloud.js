@@ -2,6 +2,7 @@ import { simplifyClaims } from 'wikibase-sdk'
 import { fetchuc, fetchc } from './../src/fetch.js';
 import { world } from './../src/world.js';
 import { queues, ee, HEADERS } from './../src/general.js';
+import process from 'process';
 
 // get the first arg to run.js
 const scriptFilter = process.argv[2]
@@ -62,7 +63,7 @@ queues.many.add(async () => {
                         }
 
                         if (!itemID) {
-                            console.log(`❌ The wikibase ${wbURL} does not have an item in the world, even though we thought it did.. lol.`)
+                            console.log(`❌ The wikibase ${wiki.domain} does not have an item in the world, even though we thought it did.. lol.`)
                             return
                         }
 
@@ -138,7 +139,7 @@ queues.many.add(async () => {
 });
 
 // Listen for alive wikis
-ee.on('cloud.wikis.new', ({ wiki, response }) => {
+ee.on('cloud.wikis.new', ({ wiki }) => {
     queues.many.add(async () => {
         const url = "https://" + wiki.domain
         const name = wiki.sitename

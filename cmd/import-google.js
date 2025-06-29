@@ -2,7 +2,8 @@ import { getJson } from 'serpapi';
 import { world } from './../src/world.js';
 import { queues, ee } from './../src/general.js';
 import { checkOnlineAndWikibase } from './../src/site.js';
-import dotenv from 'dotenv'
+import dotenv from 'dotenv';
+import process from 'process';
 dotenv.config()
 
 const serconfig = function(query) {
@@ -135,7 +136,7 @@ domains.forEach(domain => {
 });
 
 // Listen for found wikis
-ee.on('google.wikis.new', ({ domain, response }) => {
+ee.on('google.wikis.new', ({ domain }) => {
     const url = "https://" + domain
     const name = domain
 

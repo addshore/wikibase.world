@@ -2,9 +2,10 @@ import WBEdit from 'wikibase-edit'
 import { WBK } from 'wikibase-sdk'
 import { simplifyClaims } from 'wikibase-sdk'
 import { simplifySparqlResults, minimizeSimplifiedSparqlResults } from 'wikibase-sdk'
-import { fetchuc, fetchc } from './../src/fetch.js';
+import { fetchuc } from './../src/fetch.js';
 import { HEADERS } from './../src/general.js';
 import dotenv from 'dotenv'
+import process from 'process';
 
 dotenv.config()
 

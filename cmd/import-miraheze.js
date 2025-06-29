@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 import { world } from './../src/world.js';
-import { queues, ee, HEADERS } from './../src/general.js';
+import { queues, HEADERS } from './../src/general.js';
 
 // Miraheze host QID
 const MIRAHEZE_QID = 'Q118';
@@ -24,7 +24,7 @@ async function resolveFinalUrl(domain) {
         const response = await fetch(url, { headers: HEADERS, redirect: 'follow' });
         const html = await response.text();
         return { url: response.url, html: html };
-    } catch (e) {
+    } catch {
         console.log(`Failed to fetch ${url}`);
         return null;
     }
@@ -39,7 +39,7 @@ async function isWikiClosed(domain) {
             text.includes("This wiki has been automatically closed because there have been") ||
             text.includes('Dormancy Policy">closed</a>')
         );
-    } catch (e) {
+    } catch {
         console.log(`Failed to fetch main page for ${domain}`);
         return false;
     }

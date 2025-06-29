@@ -1,4 +1,4 @@
-import { fetchuc, fetchc } from './../src/fetch.js';
+import { fetchc } from './../src/fetch.js';
 import { HEADERS } from './../src/general.js';
 
 const checkOnlineAndWikibase = async (url) => {

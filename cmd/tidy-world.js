@@ -6,6 +6,7 @@ import { metadatalookup } from './../src/metadata.js'
 import { actionApigetPageCount, actionAPIgetMaxEntityIdInt, hasHostedByProfessionalWikiLogo } from './../src/site.js'
 import { simplifySparqlResults, minimizeSimplifiedSparqlResults } from 'wikibase-sdk'
 import dns from 'dns'
+import process from 'process';
 
 // get the first arg to run.js
 const scriptFilter = process.argv[2]
@@ -61,7 +62,7 @@ ee.on('world.wikis', (wiki) => {
                 ee.emit('world.wikis.maybedead', { wiki: wiki, response: response })
                 return
             }
-        } catch (e) {
+        } catch {
             console.log(`❌ The URL ${url} is not currently a 200`)
             return
         }
@@ -72,7 +73,7 @@ ee.on('world.wikis', (wiki) => {
 const REVERSE_CLOUD = "221.76.141.34.bc.googleusercontent.com";
 // const REVERSE_WBWIKI = "server-54-230-10-103.man50.r.cloudfront.net" // TODO check this one
 const REVERSE_WBWIKI = "server-108-138-217-36.lhr61.r.cloudfront.net"
-const REVERSE_WIKIMEDIA = "text-lb.esams.wikimedia.org"
+// const REVERSE_WIKIMEDIA = "text-lb.esams.wikimedia.org"
 const REVERSE_WIKITIDE = "cp37.wikitide.net" // wikitide is miraheze
 
 // Known world properties
@@ -80,7 +81,7 @@ const worldWikibseMetadataId = 'P53'
 const worldLinksToWikibase = 'P55'
 const worldLinkedFromWikibase = 'P56'
 
-ee.on('world.wikis.maybedead', async ({ wiki, response }) => {
+ee.on('world.wikis.maybedead', async ({ wiki }) => {
     console.log(`❌ The URL ${wiki.url} is not currently a 200 or a 404 with the expected text (maybe dead)`)
 });
 
@@ -91,8 +92,8 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         return
     }
 
-    wiki.reverseDNS = await new Promise((resolve, reject) => {
-        dns.lookup(wiki.domain, (err, address, family) => {
+    wiki.reverseDNS = await new Promise((resolve) => {
+        dns.lookup(wiki.domain, (err, address) => {
             if (err) {
                 console.log(`❌ Failed to lookup the IP for ${wiki.domain}`);
                 resolve([]);
@@ -208,7 +209,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                             }
                             const domain = new URL(url).hostname;
                             wiki.urlDomains.add(domain);
-                        } catch (e) {
+                        } catch {
                             console.log(`❌ Failed to parse URL ${link.url}`);
                         }
                     });
@@ -235,7 +236,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
             if (wbManifestResponse.status === 200) {
                 wiki.wbManifestData = await wbManifestResponse.json()
             }
-        } catch (e) {
+        } catch {
             console.log(`❌ Failed to get the manifest for ${wiki.site}`)
         }
     }
@@ -257,7 +258,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
             try {
                 const raw = await fetchc(url, { headers: HEADERS }).then(res => res.json())
                 return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
-            } catch (e) {
+            } catch {
                 console.log(`❌ Failed to get the formatter URL property data for ${wiki.site}`)
                 return []
             }
@@ -267,7 +268,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         wiki.formattedExternalIdDomains = []
         try {
             wiki.formattedExternalIdDomains = sparqlFormatterURLPropertyData.map(data => new URL(data.formatter).hostname)
-        } catch (e) {
+        } catch {
             // Some formatter "urls" are just $1 for example...
             console.log(`❌ Failed to get the domains for the formatter URL property data for ${wiki.site}`)
         }
@@ -362,6 +363,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                 }
                 // if there are still missing labels, add them as aliases
                 if (missingLabels.length > 0) {
+                    // eslint-disable-next-line no-unused-vars
                     missingLabels.forEach(missingLabel => {
                         // TODO write tests for figuring out labels and aliases before running this, ALSO this probably needs to happen in a single edit due to async
                         // world.queueWork.aliasAdd(queues.one, { id: wiki.item, language: 'en', value: missingLabel }, { summary: `Add en alias from known infomation` })
@@ -409,7 +411,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
 
         // Then ensure P2 (Host) -> Q8 (Wikibase.cloud) on the world item
         if (!wiki.simpleClaims.P2 || wiki.simpleClaims.P2[0] !== 'Q8') {
-            world.queueWork.claimEnsure(queue, { id: wiki.item, property: 'P2', value: 'Q8' }, { summary: `Add [[Property:P2]] claim for [[Item:Q8]] based on [[Property:P1]] of ${wiki.site}` + hostBy })
+            world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P2', value: 'Q8' }, { summary: `Add [[Property:P2]] claim for [[Item:Q8]] based on [[Property:P1]] of ${wiki.site}` + hostBy })
         }
         // We also know a variaty of URLs, as they are determined by the platform
         // P7 query service UI
@@ -509,7 +511,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                     const guid = wiki.entity.claims.P5[0].id
                     world.queueWork.referenceSet(queues.one, { guid, snaks: { P21: logApiUrl, P22: today } }, { summary: `Add references to [[Property:P5]] claim for ${inceptionDate} based on the first log entry of the wiki` })
                 }
-            } catch (e) {
+            } catch {
                 console.log(`❌ Failed to get the inception date for ${wiki.site}`)
             }
         });
@@ -659,7 +661,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                 } else {
                     console.log(`❌ The URL ${wiki.site} can not be shortened to ${shorterUrl}, as they go to different pages ${response.url} and ${newResponse.url}`);
                 }
-            } catch (e) {
+            } catch {
                 console.log(`❌ Failed to try and normalize the URL ${wiki.site}`);
             }
         });

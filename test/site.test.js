@@ -1,5 +1,5 @@
 // This function will be our mock for fetchc
-const mockFetchcImplementation = async (url, options) => {
+const mockFetchcImplementation = async (url) => {
     console.log(`[Test Mock] fetchc called with URL: ${url}`);
     if (mockFetchcImplementation.shouldThrowError) {
         throw new Error(mockFetchcImplementation.errorMessage || 'Simulated fetch error');
