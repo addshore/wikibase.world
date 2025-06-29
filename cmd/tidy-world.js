@@ -527,8 +527,8 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                     return logDifference >= 0.5;
                 }
 
-                const statistics = siteInfoApiResponse.query.statistics
-                if (statistics) {
+                if (siteInfoApiResponse && siteInfoApiResponse.query && siteInfoApiResponse.query.statistics) {
+                    const statistics = siteInfoApiResponse.query.statistics
                     if (!wiki.simpleClaims.P62) {
                         const delta = statistics.pages;
                         world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P62', value: statistics.pages }, { summary: `Add [[Property:P62]] claim for ${statistics.pages} (delta: ${delta}) based on the number of pages in the wiki (mediawiki statistics)` })
