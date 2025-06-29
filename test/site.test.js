@@ -1,4 +1,5 @@
 /* eslint-env mocha */
+/* global describe, it, beforeEach */
 import { expect } from 'chai';
 import { setMockFetchc } from '../src/fetch.js';
 import { hasHostedByProfessionalWikiLogo } from '../src/site.js';
