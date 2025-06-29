@@ -6,7 +6,7 @@ import { hasHostedByProfessionalWikiLogo } from '../src/site.js';
 
 describe('hasHostedByProfessionalWikiLogo', function () {
     // This function will be our mock for fetchc
-    const mockFetchcImplementation = async (url) => {
+    const mockFetchcImplementation = async () => {
         if (mockFetchcImplementation.shouldThrowError) {
             throw new Error(mockFetchcImplementation.errorMessage || 'Simulated fetch error');
         }
