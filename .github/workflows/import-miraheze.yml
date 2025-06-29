@@ -1,12 +1,10 @@
-name: Import Google
+name: Import Miraheze
 
 on:
-  schedule:
-    - cron: '0 4 * * 1' # Every Monday at 04:00 UTC
   workflow_dispatch:
 
 jobs:
-  import-google:
+  import-miraheze:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -17,9 +15,8 @@ jobs:
           node-version: '20'
       - name: Install dependencies
         run: npm ci
-      - name: Run import-google script
+      - name: Run import-miraheze script
         env:
           WORLD_USERNAME: ${{ secrets.WORLD_USERNAME }}
           WORLD_PASSWORD: ${{ secrets.WORLD_PASSWORD }}
-          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
-        run: node cmd/import-google.js
+        run: node cmd/import-miraheze.js

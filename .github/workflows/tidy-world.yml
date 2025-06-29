@@ -1,12 +1,12 @@
-name: Import Google
+name: Tidy World
 
 on:
   schedule:
-    - cron: '0 4 * * 1' # Every Monday at 04:00 UTC
+    - cron: '0 6 */2 * *' # Every other day at 06:00 UTC
   workflow_dispatch:
 
 jobs:
-  import-google:
+  tidy-world:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -17,9 +17,8 @@ jobs:
           node-version: '20'
       - name: Install dependencies
         run: npm ci
-      - name: Run import-google script
+      - name: Run tidy-world script
         env:
           WORLD_USERNAME: ${{ secrets.WORLD_USERNAME }}
           WORLD_PASSWORD: ${{ secrets.WORLD_PASSWORD }}
-          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
-        run: node cmd/import-google.js
+        run: node cmd/tidy-world.js
