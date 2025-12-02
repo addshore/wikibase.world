@@ -59,20 +59,23 @@ const world = {
     queueWork: {
         itemCreate: async (queue, data, requestConfig) => {
             data.type = 'item'
+            const jobName = `itemCreate: ${requestConfig.summary}`;
             queue.add(async () => {
                 const logText = `🖊️ Creating item: ${requestConfig.summary}`
                 console.log(logText)
                 await retryIn60If429(() => worldEdit.entity.create(data, requestConfig), logText)
-            });
+            }, { jobName });
         },
         labelSet: async (queue, data, requestConfig) => {
+            const jobName = `labelSet: ${data.id}`;
             queue.add(async () => {
                 const logText = `🖊️ Setting label for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`
                 console.log(logText)
                 await retryIn60If429(() => worldEdit.label.set(data, requestConfig), logText)
-            });
+            }, { jobName });
         },
         descriptionSet: async (queue, data, requestConfig) => {
+            const jobName = `descriptionSet: ${data.id}`;
             queue.add(async () => {
                 if (data.value.length > 250) {
                     console.warn(`⚠️ Description for ${data.id} in ${data.language} is too long (${data.value.length} characters): ${requestConfig.summary}`)
@@ -81,49 +84,55 @@ const world = {
                 const logText = `🖊️ Setting description for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`
                 console.log(logText)
                 await retryIn60If429(() => worldEdit.description.set(data, requestConfig), logText)
-            });
+            }, { jobName });
         },
         aliasAdd: async (queue, data, requestConfig) => {
+            const jobName = `aliasAdd: ${data.id}`;
             queue.add(async () => {
                 const logText = `🖊️ Adding alias for ${data.id} in ${data.language} as ${data.value}: ${requestConfig.summary}`
                 console.log(logText)
                 await retryIn60If429(() => worldEdit.alias.add(data, requestConfig), logText)
-            });
+            }, { jobName });
         },
         aliasRemove: async (queue, data, requestConfig) => {
+            const jobName = `aliasRemove: ${data.id}`;
             queue.add(async () => {
                 const logText = `🖊️ Removing alias for ${data.id} in ${data.language} as ${data.value}: ${requestConfig.summary}`
                 console.log(logText)
                 await retryIn60If429(() => worldEdit.alias.remove(data, requestConfig), logText)
-            });
+            }, { jobName });
         },
         claimUpdate: async (queue, data, requestConfig) => {
+            const jobName = `claimUpdate: ${data.id}/${data.property}`;
             queue.add(async () => {
                 const logText = `🖊️ Updating claim for ${data.id} with ${data.property} from ${data.oldValue} to ${data.newValue}: ${requestConfig.summary}`
                 console.log(logText)
                 await retryIn60If429(() => worldEdit.claim.update(data, requestConfig), logText)
-            });
+            }, { jobName });
         },
         claimCreate: async (queue, data, requestConfig) => {
+            const jobName = `claimCreate: ${data.id}/${data.property}`;
             queue.add(async () => {
                 const logText = `🖊️ Creating claim for ${data.id} with ${data.property} as ${data.value}: ${requestConfig.summary}`
                 console.log(logText)
                 await retryIn60If429(() => worldEdit.claim.create(data, requestConfig), logText)
-            });
+            }, { jobName });
         },
         claimRemove: async (queue, data, requestConfig) => {
+            const jobName = `claimRemove: ${data.id}/${data.property}`;
             queue.add(async () => {
                 const logText = `🖊️ Removing claim for ${data.id} with ${data.property} as ${data.value}: ${requestConfig.summary}`
                 console.log(logText)
                 await retryIn60If429(() => worldEdit.claim.remove(data, requestConfig), logText)
-            });
+            }, { jobName });
         },
         referenceSet: async (queue, data, requestConfig) => {
+            const jobName = `referenceSet: ${data.guid}`;
             queue.add(async () => {
                 const logText = `🖊️ Setting reference for ${data.guid}: ${requestConfig.summary}`
                 console.log(logText)
                 await retryIn60If429(() => worldEdit.reference.set(data, requestConfig), logText)
-            });
+            }, { jobName });
         },
     }
 }
@@ -141,7 +150,12 @@ world.sparql.wikisAll = async () => {
     }
     `
     const url = world.sdk.sparqlQuery(sparqlQuery)
-    const raw = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
+    const response = await fetchuc(url, { headers: HEADERS })
+    if (!response) {
+        console.error('❌ Failed to fetch wikisAll from SPARQL')
+        return []
+    }
+    const raw = await response.json()
     return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
 }
 
@@ -160,7 +174,12 @@ world.sparql.wikis = async () => {
     }
     `
     const url = world.sdk.sparqlQuery(sparqlQuery)
-    const raw = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
+    const response = await fetchuc(url, { headers: HEADERS })
+    if (!response) {
+        console.error('❌ Failed to fetch wikis from SPARQL')
+        return []
+    }
+    const raw = await response.json()
     return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
 }
 
@@ -178,20 +197,31 @@ world.sparql.cloudWikis = async () => {
     }
     `
     const url = world.sdk.sparqlQuery(sparqlQuery)
-    const raw = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
+    const response = await fetchuc(url, { headers: HEADERS })
+    if (!response) {
+        console.error('❌ Failed to fetch cloudWikis from SPARQL')
+        return []
+    }
+    const raw = await response.json()
     return minimizeSimplifiedSparqlResults(simplifySparqlResults(raw))
 }
 
 world.queueWork.claimEnsure = async (queue, data, requestConfig) => {
+    const jobName = `claimEnsure: ${data.id}/${data.property}`;
     queue.add(async () => {
         // Get the entity from data.id
         const url = world.sdk.getEntities({ids: [ data.id ]})
-        const response = await fetchuc(url, { headers: HEADERS }).then(res => res.json())
-        if (!response || !response.entities) {
+        const response = await fetchuc(url, { headers: HEADERS })
+        if (!response) {
             console.error(`❌ Failed to fetch entities for ${data.id}: ${requestConfig.summary}`)
             return
         }
-        const { entities } = response
+        const json = await response.json()
+        if (!json || !json.entities) {
+            console.error(`❌ Failed to parse entities for ${data.id}: ${requestConfig.summary}`)
+            return
+        }
+        const { entities } = json
         const simpleClaims = simplifyClaims(entities[data.id].claims)
         // TODO we run away from qualifiers for now? :D
         let hasClaimWithValue = false
@@ -206,7 +236,7 @@ world.queueWork.claimEnsure = async (queue, data, requestConfig) => {
         }
 
         world.queueWork.claimCreate(queue, data, requestConfig)
-    });
+    }, { jobName });
 }
 
 export { world }

@@ -84,7 +84,7 @@ queues.many.add(async () => {
                 return
             }
 
-        });
+        }, { jobName: `checkWiki: ${wiki.domain}` });
 
     });
 
@@ -140,7 +140,7 @@ queues.many.add(async () => {
             }
         }
     });
-});
+}, { jobName: `fetchCloudWikis` });
 
 // Listen for alive wikis
 ee.on('cloud.wikis.new', ({ wiki }) => {
@@ -162,5 +162,5 @@ ee.on('cloud.wikis.new', ({ wiki }) => {
                 P54: `${wiki.id}`,
             }
         }, { summary: `Importing https://${wiki.domain} from [[Item:Q8]] active wikis list` });
-    });
+    }, { jobName: `createWiki: ${wiki.domain}` });
 });
