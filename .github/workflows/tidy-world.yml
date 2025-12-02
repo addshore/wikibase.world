@@ -2,7 +2,7 @@ name: Tidy World
 
 on:
   schedule:
-    - cron: '0 6 */2 * *' # Every other day at 06:00 UTC
+    - cron: '0 6 * * 0' # Weekly, Sunday at 6:00 AM
   workflow_dispatch:
 
 jobs:

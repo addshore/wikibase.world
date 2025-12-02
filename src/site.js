@@ -57,6 +57,11 @@ const actionApigetPageCount = async (actionApi, propertyNamespaceId, limit) => {
             console.log(allPagesApiResponse.warnings);
             return null;
         }
+        if (!allPagesApiResponse.query || !allPagesApiResponse.query.allpages) {
+            console.log(`❌ Failed to get the number of properties: query or allpages is undefined`);
+            console.log(allPagesApiResponse);
+            return null;
+        }
         allPagesSoFar += allPagesApiResponse.query.allpages.length;
         if (allPagesApiResponse.continue) {
             const continueToken = allPagesApiResponse.continue.apcontinue;
