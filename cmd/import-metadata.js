@@ -41,9 +41,15 @@ queues.many.add(async () => {
         const wbURL = metadatadata.urls.baseUrl
         if (!wbURL) {
             console.log(`❌ The wikibase ${wbURL} does not have a baseUrl for MediaWiki`)
-            return
+            continue
         }
-        const domain = new URL(wbURL).hostname;
+        let domain;
+        try {
+            domain = new URL(wbURL).hostname;
+        } catch (error) {
+            console.log(`❌ The wikibase ${i} has an invalid baseUrl: ${wbURL}`)
+            continue
+        }
 
         // Make sure it doesnt already exist, so make sure the domain doesnt appear in any of the strings in worldWikiURLs
         if (!worldWikiURLs.some(wikiURL => wikiURL.includes(domain))) {
@@ -62,7 +68,7 @@ queues.many.add(async () => {
 
             if (!itemID) {
                 console.log(`❌ The wikibase ${wbURL} does not have an item in the world, even though we thought it did.. lol.`)
-                return
+                continue
             }
             world.queueWork.claimEnsure(queues.one, { id: itemID, property: 'P53', value: metadatadata.id }, { summary: `Add [[Property:P53]] for a known https://wikibase-metadata.toolforge.org Wikibase` })
         }
