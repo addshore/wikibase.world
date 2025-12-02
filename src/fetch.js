@@ -8,7 +8,7 @@ const fetchCachedInternal = NodeFetchCache.create({
 });
 const fetchuc = async (url, options) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 100000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
         let response;
         do {
@@ -26,6 +26,7 @@ const fetchuc = async (url, options) => {
         } else {
             console.error('Fetch error for fetchuc url:', url, error);
         }
+        return null;
     } finally {
         clearTimeout(timeoutId);
     }
@@ -34,7 +35,7 @@ const fetchuc = async (url, options) => {
 // Original fetchc implementation
 const originalFetchc = async (url, options) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 100000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
         let response;
         do {
@@ -52,6 +53,7 @@ const originalFetchc = async (url, options) => {
         } else {
             console.error('Fetch error for fetchc url:', url, error);
         }
+        return null;
     } finally {
         clearTimeout(timeoutId);
     }

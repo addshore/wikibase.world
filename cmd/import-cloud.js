@@ -47,6 +47,10 @@ queues.many.add(async () => {
             const url = "https://" + wiki.domain
             try{
                 const response = await fetchc(url, { headers: HEADERS })
+                if (!response) {
+                    console.log(`❌ The URL ${url} failed to fetch (connection error or timeout)`)
+                    return
+                }
                 const responseText = await response.text();
                 response.loadedText = responseText
                 if (response.status == 200 || ( response.status === 404 && responseText.includes("There is currently no text in this page") ) ) {
