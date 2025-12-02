@@ -12,7 +12,7 @@ if (scriptFilter != undefined) {
 
 // Queue an initial lookup of live wikibase.world wikis
 queues.many.add(async () => {
-    const url = "https://www.wikibase.cloud/api/wiki?sort=pages&direction=desc&is_active=1&page=1&per_page=99999";
+    const url = "https://www.wikibase.cloud/api/wiki?sort=pages&direction=desc&page=1&per_page=99999";
     const response = await fetchuc(url);
     const data = await response.json();
     // Make sure that the per_page element matches 99999
