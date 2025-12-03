@@ -54,11 +54,6 @@ async function getWikiStatus(domain) {
     }
 }
 
-async function isWikiClosed(domain) {
-    const status = await getWikiStatus(domain);
-    return status !== 'Q54';
-}
-
 async function main() {
     const dbNames = await fetchMirahezeDbList();
 
@@ -95,8 +90,6 @@ async function main() {
                 console.log(`Ensured activity claim for existing Miraheze wiki: ${finalDomain} (P13=${value})`);
             }
             continue;
-        } else {
-            // TODO use isWikiClosed to check if the wiki is closed, and update the activity claim accordingly
         }
 
         // If the page doesnt contain "wikibase" or "Wikibase somewhere on it, break (dont blindly trust the list)
