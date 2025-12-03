@@ -132,7 +132,7 @@ domains.forEach(domain => {
         }
 
         ee.emit('google.wikis.new', { domain: domain, response: checkResult })
-    });
+    }, { jobName: `checkGoogleWiki: ${domain}` });
 });
 
 // Listen for found wikis
@@ -150,4 +150,4 @@ ee.on('google.wikis.new', ({ domain }) => {
             P13: 'Q54', // active
         }
     }, { summary: `Importing https://${domain} from Google search` });
-});
+}, { jobName: `createGoogleWiki: ${domain}` });

@@ -34,7 +34,7 @@ queues.many.add(async () => {
         }
         ee.emit('world.wikis', result)
     });
-});
+}, { jobName: `fetchWorldWikis` });
 
 // Listen for the 'world.wikis' event and queue a check for each wiki
 ee.on('world.wikis', (wiki) => {
@@ -66,7 +66,7 @@ ee.on('world.wikis', (wiki) => {
             console.log(`❌ The URL ${url} is not currently a 200`)
             return
         }
-    });
+    }, { jobName: `checkWiki: ${wiki.item}` });
 });
 
 // Known reverse DNS records
@@ -514,7 +514,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
             } catch {
                 console.log(`❌ Failed to get the inception date for ${wiki.site}`)
             }
-        });
+        }, { jobName: `getInception: ${wiki.item}` });
         
         // Figure out a bunch of stuff that we can figure out from the siteinfo, and futher requests
         queues.many.add(async () => {
@@ -642,7 +642,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                 console.log(`❌ Failed to get the number of properties, users, stats etc for ${wiki.site}`)
                 console.log(e)
             }
-        });
+        }, { jobName: `getSiteInfo: ${wiki.item}` });
     }
 
     // We can try to normalize the URL if it is a Main_Page
@@ -664,6 +664,6 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
             } catch {
                 console.log(`❌ Failed to try and normalize the URL ${wiki.site}`);
             }
-        });
+        }, { jobName: `normalizeUrl: ${wiki.item}` });
     }
 });

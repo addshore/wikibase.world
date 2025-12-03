@@ -77,7 +77,7 @@ queues.many.add(async () => {
             break
         }
     }
-});
+}, { jobName: `fetchMetadataWikis` });
 
 ee.on('metadata.wikis.load', async ({ data }) => {
     // url comes from baseUrl in urls
