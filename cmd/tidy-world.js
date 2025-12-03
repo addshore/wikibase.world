@@ -519,7 +519,7 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
         // Figure out a bunch of stuff that we can figure out from the siteinfo, and futher requests
         queues.many.add(async () => {
             try{
-                const siteInfoApiUrl = wiki.actionApi + '?action=query&meta=siteinfo&siprop=namespaces|statistics&format=json'
+                const siteInfoApiUrl = wiki.actionApi + '?action=query&meta=siteinfo&siprop=general|namespaces|statistics&format=json'
                 const siteInfoApiResponse = await fetchc(siteInfoApiUrl, { headers: HEADERS }).then(res => res.json())
 
                 const shouldNumberyUpdateClaim = function(oldValue, newValue) {
@@ -583,6 +583,60 @@ ee.on('world.wikis.alive', async ({ wiki, response }) => {
                                 // TODO account for qualifiers and references?
                                 const delta = statistics.activeusers - wiki.simpleClaims.P61[0];
                                 world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P61', oldValue: wiki.simpleClaims.P61[0], newValue: statistics.activeusers }, { summary: `Update [[Property:P61]] claim from ${wiki.simpleClaims.P61[0]} to ${statistics.activeusers} (delta: ${delta}) based on the number of active users in the wiki (mediawiki statistics)` })
+                            }
+                        }
+                    }
+                }
+
+                // Handle PHP version (P68)
+                if (siteInfoApiResponse && siteInfoApiResponse.query && siteInfoApiResponse.query.general && siteInfoApiResponse.query.general.phpversion) {
+                    const phpversion = siteInfoApiResponse.query.general.phpversion;
+                    if (!wiki.simpleClaims.P68) {
+                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P68', value: phpversion }, { summary: `Add [[Property:P68]] claim for ${phpversion} based on PHP version from siteinfo` })
+                    } else {
+                        // If there is more than 1 P68 claim
+                        if (wiki.simpleClaims.P68.length > 1) {
+                            console.log(`❌ The item ${wiki.item} has more than 1 P68 claim`)
+                        } else {
+                            // If the value is different, update it
+                            if (wiki.simpleClaims.P68[0] !== phpversion) {
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P68', oldValue: wiki.simpleClaims.P68[0], newValue: phpversion }, { summary: `Update [[Property:P68]] claim from ${wiki.simpleClaims.P68[0]} to ${phpversion} based on PHP version from siteinfo` })
+                            }
+                        }
+                    }
+                }
+
+                // Handle MediaWiki DB Type (P69)
+                if (siteInfoApiResponse && siteInfoApiResponse.query && siteInfoApiResponse.query.general && siteInfoApiResponse.query.general.dbtype) {
+                    const dbtype = siteInfoApiResponse.query.general.dbtype;
+                    if (!wiki.simpleClaims.P69) {
+                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P69', value: dbtype }, { summary: `Add [[Property:P69]] claim for ${dbtype} based on database type from siteinfo` })
+                    } else {
+                        // If there is more than 1 P69 claim
+                        if (wiki.simpleClaims.P69.length > 1) {
+                            console.log(`❌ The item ${wiki.item} has more than 1 P69 claim`)
+                        } else {
+                            // If the value is different, update it
+                            if (wiki.simpleClaims.P69[0] !== dbtype) {
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P69', oldValue: wiki.simpleClaims.P69[0], newValue: dbtype }, { summary: `Update [[Property:P69]] claim from ${wiki.simpleClaims.P69[0]} to ${dbtype} based on database type from siteinfo` })
+                            }
+                        }
+                    }
+                }
+
+                // Handle MediaWiki DB Version (P70)
+                if (siteInfoApiResponse && siteInfoApiResponse.query && siteInfoApiResponse.query.general && siteInfoApiResponse.query.general.dbversion) {
+                    const dbversion = siteInfoApiResponse.query.general.dbversion;
+                    if (!wiki.simpleClaims.P70) {
+                        world.queueWork.claimEnsure(queues.one, { id: wiki.item, property: 'P70', value: dbversion }, { summary: `Add [[Property:P70]] claim for ${dbversion} based on database version from siteinfo` })
+                    } else {
+                        // If there is more than 1 P70 claim
+                        if (wiki.simpleClaims.P70.length > 1) {
+                            console.log(`❌ The item ${wiki.item} has more than 1 P70 claim`)
+                        } else {
+                            // If the value is different, update it
+                            if (wiki.simpleClaims.P70[0] !== dbversion) {
+                                world.queueWork.claimUpdate(queues.one, { id: wiki.item, property: 'P70', oldValue: wiki.simpleClaims.P70[0], newValue: dbversion }, { summary: `Update [[Property:P70]] claim from ${wiki.simpleClaims.P70[0]} to ${dbversion} based on database version from siteinfo` })
                             }
                         }
                     }
