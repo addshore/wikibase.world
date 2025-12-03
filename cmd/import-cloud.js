@@ -146,12 +146,26 @@ queues.many.add(async () => {
 ee.on('cloud.wikis.new', ({ wiki }) => {
     queues.many.add(async () => {
         const url = "https://" + wiki.domain
-        const name = wiki.sitename
+        let name = wiki.sitename
+
+        // Check if name should be ignored based on specific patterns
+        const lowerName = name.toLowerCase();
+        const ignoredPatterns = ['test', 'testwiki', 'wikibase', 'testing'];
+        const shouldIgnoreName = 
+            // Check if name exactly matches ignored patterns
+            ignoredPatterns.includes(lowerName) ||
+            // Check if name is ignored pattern followed by digits
+            ignoredPatterns.some(pattern => /^\d+$/.test(lowerName.replace(pattern, '')) && lowerName.startsWith(pattern)) ||
+            // Check if name is only digits
+            /^\d+$/.test(lowerName);
+
+        const labels = shouldIgnoreName ? { en: wiki.domain } : { en: name };
+        const aliases = shouldIgnoreName ? {} : { en: [ wiki.domain ] };
 
         // Create the item
         world.queueWork.itemCreate(queues.one, {
-            labels: { en: name },
-            aliases: { en: [ wiki.domain ] },
+            labels: labels,
+            aliases: aliases,
             claims: {
                 // Provide a basic set of claims, but let other things be filled in later.. (by the tidy)
                 P1 : url,
