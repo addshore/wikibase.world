@@ -44,11 +44,12 @@ const createTrackedQueue = (name, concurrency) => {
 };
 
 const queues = {
-    // For now, while i hit lots of 429s, everything is 1
-    // many : new PQueue({concurrency: 10}),
-    // four : new PQueue({concurrency: 4}),
-    many : createTrackedQueue('many', 4),
-    four : createTrackedQueue('four', 2),
+    // Increased concurrency for better CPU/network utilization
+    // many: parallel network fetches (no rate limit concerns)
+    // four: parallel processing with some API calls (rate limit aware)
+    // one: serialized Wikibase edits (API maxlag=30 enforces serialization)
+    many : createTrackedQueue('many', 32),
+    four : createTrackedQueue('four', 8),
     one : createTrackedQueue('one', 1),
 }
 const ee = new EventEmitter();

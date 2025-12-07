@@ -119,11 +119,18 @@ const world = {
             }, { jobName });
         },
         claimRemove: async (queue, data, requestConfig) => {
-            const jobName = `claimRemove: ${data.id}/${data.property}`;
+            const jobName = `claimRemove: ${data.id}/${data.property || data.claim}`;
             queue.add(async () => {
-                const logText = `🖊️ Removing claim for ${data.id} with ${data.property} as ${data.value}: ${requestConfig.summary}`
+                const target = data.claim ? data.claim : data.value
+                const logText = `🖊️ Removing claim for ${data.id} (${target}) ${data.property ? 'property ' + data.property : ''}: ${requestConfig.summary}`
                 console.log(logText)
-                await retryIn60If429(() => worldEdit.claim.remove(data, requestConfig), logText)
+                // If a specific claim GUID is provided, prefer removing by GUID for precision
+                if (data.claim) {
+                    // wikibase-edit expects the full claim ID (e.g., Q123$UUID) under the `claim` key
+                    await retryIn60If429(() => worldEdit.claim.remove({ claim: data.claim }, requestConfig), logText)
+                } else {
+                    await retryIn60If429(() => worldEdit.claim.remove(data, requestConfig), logText)
+                }
             }, { jobName });
         },
         referenceSet: async (queue, data, requestConfig) => {
@@ -222,19 +229,88 @@ world.queueWork.claimEnsure = async (queue, data, requestConfig) => {
             return
         }
         const { entities } = json
-        const simpleClaims = simplifyClaims(entities[data.id].claims)
-        // TODO we run away from qualifiers for now? :D
-        let hasClaimWithValue = false
-        simpleClaims[data.property]?.forEach(claim => {
-            if (claim === data.value) {
-                hasClaimWithValue = true
+        // Work with the raw claims so we can remove specific GUIDs rather than bluntly removing by value
+        const rawClaims = entities[data.id].claims && entities[data.id].claims[data.property] ? entities[data.id].claims[data.property] : []
+
+        // Helper to extract a comparable value from a claim mainsnak
+        const claimValueFrom = (claim) => {
+            try {
+                const dv = claim.mainsnak && claim.mainsnak.datavalue
+                if (!dv) return null
+                if (dv.type === 'wikibase-entityid') return dv.value && dv.value.id
+                return dv.value
+            } catch (e) {
+                return null
             }
-        })
-        if (hasClaimWithValue) {
-            // console.log(`❌ The claim on ${data.id} for ${data.property} already has a value on ${simpleClaims[data.property]}: ` + requestConfig.summary)
+        }
+
+        const formatValue = (v) => {
+            if (v === null || v === undefined) return 'null'
+            if (typeof v === 'object') {
+                // Quantity objects have amount and unit
+                if ('amount' in v) return `${v.amount}`
+                // datavalue objects or other objects - stringify minimally
+                try { return JSON.stringify(v) } catch (e) { return String(v) }
+            }
+            return String(v)
+        }
+
+        const fullClaims = rawClaims.map(c => ({ guid: c.id, value: claimValueFrom(c) }))
+
+        // If there's no existing claim for this property, create it
+        if (fullClaims.length === 0) {
+            console.log(`🖊️ claimEnsure create: ${data.id} ${data.property} → ${formatValue(data.value)} : ${requestConfig.summary}`)
+            world.queueWork.claimCreate(queue, data, requestConfig)
             return
         }
 
+        const desired = data.value
+        const desiredClaims = fullClaims.filter(c => {
+            // Compare primitive and simple objects (e.g. quantity.amount vs number)
+            try {
+                if (typeof c.value === 'object' && c.value !== null && 'amount' in c.value) {
+                    // quantity object - compare numeric values
+                    const a = parseInt(String(c.value.amount).replace('+',''), 10)
+                    const b = typeof desired === 'object' && desired !== null && 'amount' in desired
+                        ? parseInt(String(desired.amount).replace('+',''), 10)
+                        : parseInt(String(desired), 10)
+                    return a === b
+                }
+                return c.value === desired
+            } catch (e) {
+                return false
+            }
+        })
+
+        // If we already have the desired value present in one or more claims
+        if (desiredClaims.length >= 1) {
+            // Keep one desired claim, remove any other claims (including duplicates)
+            const keepGuid = desiredClaims[0].guid
+            let removed = 0
+            for (const c of fullClaims) {
+                if (c.guid !== keepGuid) {
+                    removed++
+                    console.log(`🖊️ claimEnsure remove duplicate: ${data.id} ${data.property} (${c.guid}) (keeping ${keepGuid})`)
+                    world.queueWork.claimRemove(queue, { id: data.id, claim: c.guid }, requestConfig)
+                }
+            }
+            if (removed > 0) console.log(`🖊️ claimEnsure kept existing ${data.id} ${data.property} → ${formatValue(desired)} (removed ${removed} duplicates)`)
+            return
+        }
+
+        // No existing desired value present
+        if (fullClaims.length === 1) {
+            // Replace single existing claim with our value
+            console.log(`🖊️ claimEnsure replace: ${data.id} ${data.property} ${formatValue(fullClaims[0].value)} → ${formatValue(desired)} : ${requestConfig.summary}`)
+            world.queueWork.claimUpdate(queue, { id: data.id, property: data.property, oldValue: fullClaims[0].value, newValue: desired }, requestConfig)
+            return
+        }
+
+        // Multiple existing claims and none match desired: remove them all by GUID then create the canonical claim
+        console.log(`🖊️ claimEnsure normalize: ${data.id} ${data.property} removing ${fullClaims.length} claims then creating ${formatValue(desired)}`)
+        for (const c of fullClaims) {
+            world.queueWork.claimRemove(queue, { id: data.id, claim: c.guid }, requestConfig)
+        }
         world.queueWork.claimCreate(queue, data, requestConfig)
     }, { jobName });
 }
