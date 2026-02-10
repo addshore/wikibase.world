@@ -126,8 +126,8 @@ const world = {
                 console.log(logText)
                 // If a specific claim GUID is provided, prefer removing by GUID for precision
                 if (data.claim) {
-                    // wikibase-edit expects the full claim ID (e.g., Q123$UUID) under the `claim` key
-                    await retryIn60If429(() => worldEdit.claim.remove({ claim: data.claim }, requestConfig), logText)
+                    // wikibase-edit expects the full claim ID (e.g., Q123$UUID) under the `guid` key
+                    await retryIn60If429(() => worldEdit.claim.remove({ guid: data.claim }, requestConfig), logText)
                 } else {
                     await retryIn60If429(() => worldEdit.claim.remove(data, requestConfig), logText)
                 }
