@@ -1,6 +1,5 @@
 import WBEdit from 'wikibase-edit'
 import { WBK } from 'wikibase-sdk'
-import { simplifyClaims } from 'wikibase-sdk'
 import { simplifySparqlResults, minimizeSimplifiedSparqlResults } from 'wikibase-sdk'
 import { fetchuc } from './../src/fetch.js';
 import { HEADERS } from './../src/general.js';
@@ -276,7 +275,7 @@ world.queueWork.claimEnsure = async (queue, data, requestConfig) => {
                 if (!dv) return null
                 if (dv.type === 'wikibase-entityid') return dv.value && dv.value.id
                 return dv.value
-            } catch (e) {
+            } catch {
                 return null
             }
         }
@@ -287,7 +286,7 @@ world.queueWork.claimEnsure = async (queue, data, requestConfig) => {
                 // Quantity objects have amount and unit
                 if ('amount' in v) return `${v.amount}`
                 // datavalue objects or other objects - stringify minimally
-                try { return JSON.stringify(v) } catch (e) { return String(v) }
+                try { return JSON.stringify(v) } catch { return String(v) }
             }
             return String(v)
         }
@@ -314,7 +313,7 @@ world.queueWork.claimEnsure = async (queue, data, requestConfig) => {
                     return a === b
                 }
                 return c.value === desired
-            } catch (e) {
+            } catch {
                 return false
             }
         })

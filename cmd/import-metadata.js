@@ -135,7 +135,7 @@ function setupEventFlow() {
     });
     
     // Handle existing wiki - ensure metadata ID claim
-    eventBus.register(MetadataEvents.WIKI_EXISTS, 'metadata:update-existing', ({ id, data, domain, existingItemId }) => {
+    eventBus.register(MetadataEvents.WIKI_EXISTS, 'metadata:update-existing', ({ data, domain, existingItemId }) => {
         if (!existingItemId) {
             console.log(`   ❌ ${domain}: could not find item ID`);
             return;
@@ -168,7 +168,7 @@ function setupEventFlow() {
     });
     
     // Handle valid new wiki - create item
-    eventBus.register(MetadataEvents.WIKI_VALID, 'metadata:create-new', ({ id, data, domain, baseUrl }) => {
+    eventBus.register(MetadataEvents.WIKI_VALID, 'metadata:create-new', ({ data, domain, baseUrl }) => {
         // Get URL without protocol for label
         const urlNoProt = baseUrl.split("//")[1];
         

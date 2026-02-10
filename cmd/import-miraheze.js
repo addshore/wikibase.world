@@ -119,7 +119,7 @@ async function getWikiStatus(db) {
         }
         
         return 'Q54'; // active
-    } catch (e) {
+    } catch {
         console.log(`   ⚠️ Failed to fetch main page for ${db}, assuming active`);
         return 'Q54'; // assume active on error
     }

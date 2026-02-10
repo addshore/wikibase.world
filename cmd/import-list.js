@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import fs from 'fs';
+import process from 'process';
 import { world } from './../src/world.js';
 import { queues, HEADERS } from './../src/general.js';
 
@@ -52,7 +53,7 @@ async function tryFetchListFromUrl(url) {
         const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
         if (lines.length > 1) return lines;
         return null;
-    } catch (e) {
+    } catch {
         return null;
     }
 }
@@ -108,33 +109,33 @@ function normalizeToUrl(s) {
     try {
         const u = new URL(s);
         return u.href.replace(/\/$/, '');
-    } catch (e) {
+    } catch {
         return null;
     }
 }
 
-// Simple status detection (copied from import-miraheze heuristics)
-async function getWikiStatusByUrl(url) {
-    try {
-        const response = await fetchWithTimeout(url, { headers: HEADERS }, 10000);
-        const text = await response.text();
-        if (text.includes('<title>Wiki deleted</title>') || text.includes('<h1><b>Wiki deleted</b></h1>')) {
-            return 'Q57';
-        }
-        // Treat an explicit "Wiki deleted" marker as permanently offline.
-        // Otherwise, use HTTP success (200) or 404-with-no-text as active; default to active.
-        return 'Q54';
-    } catch (e) {
-        return 'Q54';
-    }
-}
+// // Simple status detection (copied from import-miraheze heuristics)
+// async function getWikiStatusByUrl(url) {
+//     try {
+//         const response = await fetchWithTimeout(url, { headers: HEADERS }, 10000);
+//         const text = await response.text();
+//         if (text.includes('<title>Wiki deleted</title>') || text.includes('<h1><b>Wiki deleted</b></h1>')) {
+//             return 'Q57';
+//         }
+//         // Treat an explicit "Wiki deleted" marker as permanently offline.
+//         // Otherwise, use HTTP success (200) or 404-with-no-text as active; default to active.
+//         return 'Q54';
+//     } catch {
+//         return 'Q54';
+//     }
+// }
 
 async function resolveFinal(url) {
     try {
         const res = await fetchWithTimeout(url, { headers: HEADERS, redirect: 'follow' }, 15000);
         const html = await res.text();
         return { url: res.url, html };
-    } catch (e) {
+    } catch {
         return null;
     }
 }
@@ -142,15 +143,14 @@ async function resolveFinal(url) {
 async function main() {
     console.log('📥 Import list — queuing sites for import');
     const worldWikis = await world.sparql.wikisAll();
-    const worldWikiURLs = worldWikis.map(w => w.site.toLowerCase());
     // Build a map of existing host -> item for fast exact hostname lookup
     const existingHostToItem = new Map();
     for (const w of worldWikis) {
         try {
             const host = new URL(w.site).hostname.toLowerCase();
             if (!existingHostToItem.has(host)) existingHostToItem.set(host, w.item);
-        } catch (e) {
-            // ignore malformed site
+        } catch {
+            void 0;
         }
     }
 
@@ -161,8 +161,8 @@ async function main() {
         try {
             const host = new URL(u).hostname.toLowerCase();
             if (!hostSeen.has(host)) hostSeen.set(host, u);
-        } catch (e) {
-            // ignore
+        } catch {
+            void 0;
         }
     }
     inputURLs = Array.from(hostSeen.values());
@@ -214,7 +214,9 @@ async function main() {
         try {
             const inputDomain = new URL(normalized).hostname;
             if (inputDomain !== domain) aliases.en = [inputDomain];
-        } catch {}
+        } catch {
+            void 0;
+        }
 
         const claims = {
             P1: r.url,
