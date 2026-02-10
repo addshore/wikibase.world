@@ -34,21 +34,58 @@ const worldEdit = WBEdit({
     bot: true,
 })
 
-// Function that retries the callback in 10 seconds if we catch any error that says "429 Too Many Requests"
-const retryIn60If429 = async (callback, name) => {
+const MAX_TRANSIENT_RETRY_ATTEMPTS = 4
+const TRANSIENT_RETRY_CONFIGS = [
+    {
+        label: '429 Too Many Requests',
+        check: (error) => typeof error?.message === 'string' && error.message.includes('429 Too Many Requests'),
+        delay: 10000,
+    },
+    {
+        label: 'wikibase DBConnectionError',
+        check: (error) => {
+            if (!error) return false
+            const message = typeof error.message === 'string' ? error.message : ''
+            if (message.includes('internal_api_error_DBConnectionError')) return true
+            if (typeof error.name === 'string' && error.name.includes('DBConnectionError')) return true
+            if (error?.body?.error?.code === 'internal_api_error_DBConnectionError') return true
+            return false
+        },
+        delay: 15000,
+    },
+]
+
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
+const getTransientRetryConfig = (error) => {
+    for (const config of TRANSIENT_RETRY_CONFIGS) {
+        if (config.check(error)) {
+            return config
+        }
+    }
+    return null
+}
+
+const retryOnTransientError = async (callback, name, attempt = 1) => {
     try {
         return await callback()
     } catch (error) {
-        if (error.message.includes('429 Too Many Requests')) {
-            console.log(`↩️⏸️ 429 Too Many Requests in world callback, retrying in 10 seconds for ` + name)
-            await new Promise(resolve => setTimeout(resolve, 10000))
-            console.log('↩️ Retrying now for ' + name)
-            return await retryIn60If429(callback)
-        } else if (error.name === 'AbortError') {
+        if (error.name === 'AbortError') {
             console.error('Fetch aborted for ' + name)
-        } else {
-            throw error
+            return
         }
+
+        const retryConfig = getTransientRetryConfig(error)
+        if (retryConfig && attempt < MAX_TRANSIENT_RETRY_ATTEMPTS) {
+            const nextAttempt = attempt + 1
+            const delaySeconds = retryConfig.delay / 1000
+            console.log(`↩️⏸️ ${retryConfig.label} in world callback, retrying in ${delaySeconds} seconds for ${name} (attempt ${nextAttempt}/${MAX_TRANSIENT_RETRY_ATTEMPTS})`)
+            await wait(retryConfig.delay)
+            console.log(`↩️ Retrying now for ${name}`)
+            return await retryOnTransientError(callback, name, nextAttempt)
+        }
+
+        throw error
     }
 }
 
@@ -63,7 +100,7 @@ const world = {
             queue.add(async () => {
                 const logText = `🖊️ Creating item: ${requestConfig.summary}`
                 console.log(logText)
-                await retryIn60If429(() => worldEdit.entity.create(data, requestConfig), logText)
+                await retryOnTransientError(() => worldEdit.entity.create(data, requestConfig), logText)
             }, { jobName });
         },
         labelSet: async (queue, data, requestConfig) => {
@@ -71,7 +108,7 @@ const world = {
             queue.add(async () => {
                 const logText = `🖊️ Setting label for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`
                 console.log(logText)
-                await retryIn60If429(() => worldEdit.label.set(data, requestConfig), logText)
+                await retryOnTransientError(() => worldEdit.label.set(data, requestConfig), logText)
             }, { jobName });
         },
         descriptionSet: async (queue, data, requestConfig) => {
@@ -83,7 +120,7 @@ const world = {
                 }
                 const logText = `🖊️ Setting description for ${data.id} in ${data.language} to ${data.value}: ${requestConfig.summary}`
                 console.log(logText)
-                await retryIn60If429(() => worldEdit.description.set(data, requestConfig), logText)
+                await retryOnTransientError(() => worldEdit.description.set(data, requestConfig), logText)
             }, { jobName });
         },
         aliasAdd: async (queue, data, requestConfig) => {
@@ -91,7 +128,7 @@ const world = {
             queue.add(async () => {
                 const logText = `🖊️ Adding alias for ${data.id} in ${data.language} as ${data.value}: ${requestConfig.summary}`
                 console.log(logText)
-                await retryIn60If429(() => worldEdit.alias.add(data, requestConfig), logText)
+                await retryOnTransientError(() => worldEdit.alias.add(data, requestConfig), logText)
             }, { jobName });
         },
         aliasRemove: async (queue, data, requestConfig) => {
@@ -99,7 +136,7 @@ const world = {
             queue.add(async () => {
                 const logText = `🖊️ Removing alias for ${data.id} in ${data.language} as ${data.value}: ${requestConfig.summary}`
                 console.log(logText)
-                await retryIn60If429(() => worldEdit.alias.remove(data, requestConfig), logText)
+                await retryOnTransientError(() => worldEdit.alias.remove(data, requestConfig), logText)
             }, { jobName });
         },
         claimUpdate: async (queue, data, requestConfig) => {
@@ -107,7 +144,7 @@ const world = {
             queue.add(async () => {
                 const logText = `🖊️ Updating claim for ${data.id} with ${data.property} from ${data.oldValue} to ${data.newValue}: ${requestConfig.summary}`
                 console.log(logText)
-                await retryIn60If429(() => worldEdit.claim.update(data, requestConfig), logText)
+                await retryOnTransientError(() => worldEdit.claim.update(data, requestConfig), logText)
             }, { jobName });
         },
         claimCreate: async (queue, data, requestConfig) => {
@@ -115,7 +152,7 @@ const world = {
             queue.add(async () => {
                 const logText = `🖊️ Creating claim for ${data.id} with ${data.property} as ${data.value}: ${requestConfig.summary}`
                 console.log(logText)
-                await retryIn60If429(() => worldEdit.claim.create(data, requestConfig), logText)
+                await retryOnTransientError(() => worldEdit.claim.create(data, requestConfig), logText)
             }, { jobName });
         },
         claimRemove: async (queue, data, requestConfig) => {
@@ -127,9 +164,9 @@ const world = {
                 // If a specific claim GUID is provided, prefer removing by GUID for precision
                 if (data.claim) {
                     // wikibase-edit expects the full claim ID (e.g., Q123$UUID) under the `claim` key
-                    await retryIn60If429(() => worldEdit.claim.remove({ claim: data.claim }, requestConfig), logText)
+                    await retryOnTransientError(() => worldEdit.claim.remove({ claim: data.claim }, requestConfig), logText)
                 } else {
-                    await retryIn60If429(() => worldEdit.claim.remove(data, requestConfig), logText)
+                    await retryOnTransientError(() => worldEdit.claim.remove(data, requestConfig), logText)
                 }
             }, { jobName });
         },
@@ -138,7 +175,7 @@ const world = {
             queue.add(async () => {
                 const logText = `🖊️ Setting reference for ${data.guid}: ${requestConfig.summary}`
                 console.log(logText)
-                await retryIn60If429(() => worldEdit.reference.set(data, requestConfig), logText)
+                await retryOnTransientError(() => worldEdit.reference.set(data, requestConfig), logText)
             }, { jobName });
         },
     }
