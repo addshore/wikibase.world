@@ -1,8 +1,9 @@
 name: Import Metadata
 
 on:
-  schedule:
-    - cron: '0 5 * * *' # Every day at 05:00 UTC
+# Disabled per https://github.com/wmde/wikibase-metadata/issues/148
+#   schedule:
+#     - cron: '0 5 * * *' # Every day at 05:00 UTC
   workflow_dispatch:
 
 jobs:
