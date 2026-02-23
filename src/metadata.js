@@ -26,6 +26,9 @@ const generateQuery = (id) => {
 }
 
 let metadatalookup = async (id) => {
+    // Not for now, see https://github.com/wmde/wikibase-metadata/issues/148
+    return undefined;
+    
     // POST the query to the URL
     let postData  = {
         operationName: "MyQuery",
