@@ -87,7 +87,10 @@ async function initializeWorldContext() {
  */
 function findExistingWikiItem(domain) {
     for (let i = 0; i < worldContext.worldWikiURLs.length; i++) {
-        if (worldContext.worldWikiURLs[i].includes(domain)) {
+        // Extract domain from URL and match exactly to avoid substring matches
+        // e.g., "glambase" matching "lambase" when both are in the same URL
+        const urlDomain = worldContext.worldWikiURLs[i].replace(/^https?:\/\//, '').split('/')[0];
+        if (urlDomain === domain) {
             return worldContext.worldWikiItems[i];
         }
     }
