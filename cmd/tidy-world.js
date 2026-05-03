@@ -60,8 +60,21 @@ function setupEventFlow() {
     eventBus.register(Events.WIKI_DISCOVERED, 'core:check-alive', (wiki) => {
         queues.many.add(async () => {
             try {
-                const response = await fetchc(wiki.site, { headers: HEADERS });
-                const responseText = await response?.text();
+                let response = await fetchc(wiki.site, { method: 'HEAD', headers: HEADERS });
+                let responseText;
+
+                if (response && response.status === 200) {
+                    const linkHeader = response.headers.get('Link');
+                    if (linkHeader && linkHeader.includes('rel="EditURI"')) {
+                        // If we have the EditURI in the Link header, we consider it alive
+                        eventBus.emit(Events.WIKI_ALIVE, { wiki, response });
+                        return;
+                    }
+                }
+
+                // Fallback to GET if HEAD failed or didn't have EditURI Link header
+                response = await fetchc(wiki.site, { headers: HEADERS });
+                responseText = await response?.text();
                 
                 if (!response || !responseText) {
                     eventBus.emit(Events.WIKI_DEAD, { wiki, reason: 'No response' });
@@ -131,14 +144,14 @@ function setupEventFlow() {
  */
 async function buildWikiContext(wiki, response) {
     wiki.url = wiki.site;
-    wiki.responseText = response.loadedText;
+    wiki.responseText = response.loadedText || '';
     wiki.domain = wiki.site.replace('https://', '').replace('http://', '').split('/')[0];
     
     // Perform reverse DNS lookup
     wiki.reverseDNS = await fetchReverseDNS(wiki.domain);
     
     // Extract action API from EditURI
-    wiki.actionApi = extractActionApi(wiki.responseText);
+    wiki.actionApi = extractActionApi(wiki.responseText, response);
     wiki.restApi = wiki.actionApi?.replace('/api.php', '/rest.php') || null;
     
     // Extract page meta data
@@ -158,13 +171,33 @@ async function buildWikiContext(wiki, response) {
 }
 
 /**
- * Extract action API URL from response text
+ * Extract action API URL from response text or Link header
  */
-function extractActionApi(responseText) {
-    const matches = responseText.match(/<link rel="EditURI" type="application\/rsd\+xml" href="(.+?)"/);
-    if (!matches) return null;
-    
-    let apiUrl = matches[1].replace('?action=rsd', '');
+function extractActionApi(responseText, response = null) {
+    let apiUrl = null;
+
+    // Try Link header first
+    if (response && typeof response.headers?.get === 'function') {
+        const linkHeader = response.headers.get('Link');
+        if (linkHeader) {
+            const match = linkHeader.match(/<(.+?)>;\s*rel="EditURI"/);
+            if (match) {
+                apiUrl = match[1];
+            }
+        }
+    }
+
+    // Fallback to HTML parsing
+    if (!apiUrl && responseText) {
+        const matches = responseText.match(/<link rel="EditURI" type="application\/rsd\+xml" href="(.+?)"/);
+        if (matches) {
+            apiUrl = matches[1];
+        }
+    }
+
+    if (!apiUrl) return null;
+
+    apiUrl = apiUrl.replace('?action=rsd', '');
     if (apiUrl.startsWith('//')) {
         apiUrl = 'https:' + apiUrl;
     }
