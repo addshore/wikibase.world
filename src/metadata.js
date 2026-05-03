@@ -2,6 +2,7 @@ import { fetchc } from './../src/fetch.js';
 import { HEADERS } from './../src/general.js';
 
 let graphqlURL = "https://wikibase-metadata.toolforge.org/graphql"
+const METADATA_LOOKUP_ENABLED = false;
 const generateQuery = (id) => {
     return `query MyQuery {
   wikibase(wikibaseId: ${id}) {
@@ -27,7 +28,9 @@ const generateQuery = (id) => {
 
 let metadatalookup = async (id) => {
     // Not for now, see https://github.com/wmde/wikibase-metadata/issues/148
+  if (!METADATA_LOOKUP_ENABLED) {
     return undefined;
+  }
     
     // POST the query to the URL
     let postData  = {
