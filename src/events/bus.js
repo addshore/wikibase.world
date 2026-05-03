@@ -54,6 +54,7 @@ export const Events = {
     DATA_REVERSE_DNS: 'wiki.data.reverse-dns',
     DATA_PAGE_META: 'wiki.data.page-meta',
     DATA_WB_METADATA: 'wiki.data.wb-metadata',
+    DATA_LAST_EDIT: 'wiki.data.last-edit',
     
     // Edit events
     EDIT_CLAIM_ENSURE: 'edit.claim.ensure',

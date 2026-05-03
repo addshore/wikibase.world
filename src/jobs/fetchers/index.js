@@ -8,6 +8,7 @@ import manifestFetcher from './manifest.js';
 import reverseDnsFetcher from './reverse-dns.js';
 import entityCountsFetcher from './entity-counts.js';
 import externalLinksFetcher from './external-links.js';
+import lastEditFetcher from './last-edit.js';
 
 export const fetchers = [
     siteinfoFetcher,
@@ -16,6 +17,7 @@ export const fetchers = [
     reverseDnsFetcher,
     entityCountsFetcher,
     externalLinksFetcher,
+    lastEditFetcher,
 ];
 
 /**
