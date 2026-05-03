@@ -3,15 +3,29 @@ import { HEADERS } from './../src/general.js';
 
 const checkOnlineAndWikibase = async (url) => {
     try{
-        const response = await fetchc(url, { headers: HEADERS })
-        const responseText = await response.text();
-        response.loadedText = responseText
-        if (!(response.status == 200 || ( response.status === 404 && responseText.includes("There is currently no text in this page") ) ) ) {
-            return {result: false, text: `❌ The URL ${url} is not currently a 200 or a 404 with the expected MediaWiki text`}
+        let response = await fetchc(url, { method: 'HEAD', headers: HEADERS })
+        let responseText;
+        let actionApiMatchs;
+
+        if (response && response.status === 200) {
+            const linkHeader = response.headers.get('Link');
+            if (linkHeader) {
+                actionApiMatchs = linkHeader.match(/<(.+?)>;\s*rel="EditURI"/);
+            }
         }
 
-        // Bail if it doesnt have a correct EditURI
-        let actionApiMatchs = responseText.match(/<link rel="EditURI" type="application\/rsd\+xml" href="(.+?)"/)
+        if (!actionApiMatchs) {
+            response = await fetchc(url, { headers: HEADERS })
+            responseText = await response.text();
+            response.loadedText = responseText
+            if (!(response.status == 200 || ( response.status === 404 && responseText.includes("There is currently no text in this page") ) ) ) {
+                return {result: false, text: `❌ The URL ${url} is not currently a 200 or a 404 with the expected MediaWiki text`}
+            }
+
+            // Bail if it doesnt have a correct EditURI
+            actionApiMatchs = responseText.match(/<link rel="EditURI" type="application\/rsd\+xml" href="(.+?)"/)
+        }
+
         if (!actionApiMatchs) {
             return {result: false, text: `❌ The URL ${url} does not have a correct EditURI for MediaWiki`}
         }
