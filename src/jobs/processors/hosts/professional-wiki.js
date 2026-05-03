@@ -26,7 +26,7 @@ const HOST_QID = 'Q7';
 export async function hasHostedByProfessionalWikiLogo(url, responseText = null) {
     try {
         let htmlContent = responseText;
-        if (htmlContent === null) {
+        if (htmlContent === null || htmlContent === undefined || htmlContent === '') {
             const response = await fetchc(url, { headers: HEADERS });
             htmlContent = await response?.text();
         }

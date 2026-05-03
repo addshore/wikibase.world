@@ -26,6 +26,14 @@ const createTrackedQueue = (name, concurrency) => {
             jobs.set(jobId, { name: jobName, active: true });
             try {
                 return await fn();
+            } catch (error) {
+                const message = error && error.message ? error.message : String(error);
+                console.error(`❌ [${name}] Job failed: ${jobName} - ${message}`);
+                if (error && error.stack) {
+                    console.error(error.stack);
+                }
+                // Swallow job errors so one failed task does not crash the whole tidy run.
+                return undefined;
             } finally {
                 jobs.delete(jobId);
             }

@@ -88,6 +88,14 @@ const retryOnTransientError = async (callback, name, attempt = 1) => {
     }
 }
 
+const isInvalidGuidError = (error) => {
+    if (!error) return false
+    if (error?.body?.error?.code === 'invalid-guid') return true
+    if (error?.context?.body?.error?.code === 'invalid-guid') return true
+    if (typeof error?.message === 'string' && error.message.includes('invalid-guid')) return true
+    return false
+}
+
 const world = {
     sdk: worldSDK,
     edit: worldEdit,
@@ -163,7 +171,15 @@ const world = {
                 // If a specific claim GUID is provided, prefer removing by GUID for precision
                 if (data.claim) {
                     // wikibase-edit expects the full claim ID (e.g., Q123$UUID) under the `claim` key
-                    await retryOnTransientError(() => worldEdit.claim.remove({ guid: data.claim }, requestConfig), logText)
+                    try {
+                        await retryOnTransientError(() => worldEdit.claim.remove({ guid: data.claim }, requestConfig), logText)
+                    } catch (error) {
+                        if (isInvalidGuidError(error)) {
+                            console.warn(`⚠️ Ignoring already-missing/invalid claim guid ${data.claim} on ${data.id}`)
+                            return
+                        }
+                        throw error
+                    }
                 } else {
                     await retryOnTransientError(() => worldEdit.claim.remove(data, requestConfig), logText)
                 }
