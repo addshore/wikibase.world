@@ -7,6 +7,7 @@ import activityStatusProcessor from './activity-status.js';
 import labelsDescriptionsProcessor from './labels-descriptions.js';
 import urlNormalizerProcessor from './url-normalizer.js';
 import wikiLinksProcessor from './wiki-links.js';
+import lastEditProcessor from './last-edit.js';
 
 export const processors = [
     mediawikiVersionProcessor,
@@ -14,6 +15,7 @@ export const processors = [
     labelsDescriptionsProcessor,
     urlNormalizerProcessor,
     wikiLinksProcessor,
+    lastEditProcessor,
 ];
 
 /**

@@ -312,6 +312,12 @@ world.queueWork.claimEnsure = async (queue, data, requestConfig) => {
                         : parseInt(String(desired), 10)
                     return a === b
                 }
+                if (typeof c.value === 'object' && c.value !== null && 'time' in c.value) {
+                    // time object - compare time and precision
+                    const isTimeMatch = c.value.time === desired.time;
+                    const isPrecisionMatch = c.value.precision === desired.precision;
+                    return isTimeMatch && isPrecisionMatch;
+                }
                 return c.value === desired
             } catch {
                 return false
