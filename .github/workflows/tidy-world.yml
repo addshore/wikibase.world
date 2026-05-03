@@ -21,9 +21,4 @@ jobs:
         env:
           WORLD_USERNAME: ${{ secrets.WORLD_USERNAME }}
           WORLD_PASSWORD: ${{ secrets.WORLD_PASSWORD }}
-          FETCH_DEBUG: '1'
-          FETCH_DEBUG_DNS: '1'
-          FETCH_TIMEOUT_MS: '10000'
-          FETCH_RETRY_DELAY_MS: '10000'
-          FETCH_SLOW_LOG_MS: '5000'
         run: node cmd/tidy-world.js

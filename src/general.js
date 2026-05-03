@@ -1,29 +1,7 @@
 import PQueue from 'p-queue';
 import EventEmitter from 'node:events';
-import process from 'node:process';
 
 const HEADERS = { 'User-Agent': 'Addshore Addbot wikibase.world' };
-
-const envInt = (name, fallback) => {
-    const raw = process.env[name];
-    if (raw === undefined || raw === '') {
-        return fallback;
-    }
-
-    const parsed = Number.parseInt(raw, 10);
-    if (Number.isNaN(parsed) || parsed <= 0) {
-        console.warn(`⚠️ Invalid ${name} value "${raw}", using ${fallback}`);
-        return fallback;
-    }
-
-    return parsed;
-};
-
-const queueConcurrency = {
-    many: envInt('QUEUE_MANY_CONCURRENCY', 32),
-    four: envInt('QUEUE_FOUR_CONCURRENCY', 8),
-    one: envInt('QUEUE_ONE_CONCURRENCY', 1),
-};
 
 // Create wrapper queues that track job names
 const createTrackedQueue = (name, concurrency) => {
@@ -70,9 +48,9 @@ const queues = {
     // many: parallel network fetches (no rate limit concerns)
     // four: parallel processing with some API calls (rate limit aware)
     // one: serialized Wikibase edits (API maxlag=30 enforces serialization)
-    many : createTrackedQueue('many', queueConcurrency.many),
-    four : createTrackedQueue('four', queueConcurrency.four),
-    one : createTrackedQueue('one', queueConcurrency.one),
+    many : createTrackedQueue('many', 32),
+    four : createTrackedQueue('four', 8),
+    one : createTrackedQueue('one', 1),
 }
 const ee = new EventEmitter();
 
@@ -105,7 +83,7 @@ const queueStats = () => {
 };
 
 // Log queue stats every 30 seconds if there are pending items
-const queueMonitorInterval = setInterval(() => {
+setInterval(() => {
     const stats = queueStats();
     const totalPending = stats.many.pending + stats.four.pending + stats.one.pending;
     const totalSize = stats.many.size + stats.four.size + stats.one.size;
@@ -117,6 +95,4 @@ const queueMonitorInterval = setInterval(() => {
     }
 }, 30000);
 
-queueMonitorInterval.unref?.();
-
-export { queues, ee, HEADERS, queueStats, queueConcurrency };
+export { queues, ee, HEADERS, queueStats };

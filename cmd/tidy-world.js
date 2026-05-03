@@ -15,7 +15,7 @@
 import { simplifyClaims } from 'wikibase-sdk';
 import { fetchuc, fetchc } from '../src/fetch.js';
 import { world } from '../src/world.js';
-import { queues, HEADERS, queueConcurrency } from '../src/general.js';
+import { queues, HEADERS } from '../src/general.js';
 import { eventBus, Events } from '../src/events/bus.js';
 import { registerAllFetchers } from '../src/jobs/fetchers/index.js';
 import { registerAllProcessors } from '../src/jobs/processors/index.js';
@@ -60,12 +60,7 @@ function setupEventFlow() {
     eventBus.register(Events.WIKI_DISCOVERED, 'core:check-alive', (wiki) => {
         queues.many.add(async () => {
             try {
-                let response = await fetchc(wiki.site, {
-                    method: 'HEAD',
-                    headers: HEADERS,
-                    debugLabel: 'tidy-world:check-alive:head',
-                    diagnostics: { wikiItem: wiki.item, wikiSite: wiki.site }
-                });
+                let response = await fetchc(wiki.site, { method: 'HEAD', headers: HEADERS });
                 let responseText;
 
                 if (response && response.status === 200) {
@@ -78,11 +73,7 @@ function setupEventFlow() {
                 }
 
                 // Fallback to GET if HEAD failed or didn't have EditURI Link header
-                response = await fetchc(wiki.site, {
-                    headers: HEADERS,
-                    debugLabel: 'tidy-world:check-alive:get',
-                    diagnostics: { wikiItem: wiki.item, wikiSite: wiki.site }
-                });
+                response = await fetchc(wiki.site, { headers: HEADERS });
                 responseText = await response?.text();
                 
                 if (!response || !responseText) {
@@ -288,15 +279,6 @@ async function waitForQueues() {
  */
 async function startTidy() {
     console.log('🧹 Starting Tidy World v2');
-    console.log('');
-    console.log('🛠️ Runtime configuration');
-    console.log(`   Node: ${process.version}`);
-    console.log(`   Platform: ${process.platform} ${process.arch}`);
-    console.log(`   Fetch timeout: ${process.env.FETCH_TIMEOUT_MS || '10000'}ms`);
-    console.log(`   Fetch retry delay: ${process.env.FETCH_RETRY_DELAY_MS || '10000'}ms`);
-    console.log(`   Fetch debug: ${process.env.FETCH_DEBUG || '0'}`);
-    console.log(`   Fetch debug DNS: ${process.env.FETCH_DEBUG_DNS || '0'}`);
-    console.log(`   Queue concurrency: many=${queueConcurrency.many}, four=${queueConcurrency.four}, one=${queueConcurrency.one}`);
     console.log('');
     
     // Initialize world context
