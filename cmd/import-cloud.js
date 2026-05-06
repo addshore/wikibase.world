@@ -151,7 +151,10 @@ function setupEventFlow() {
                     return;
                 }
                 
-                const responseText = await response.text();
+                const responseText = await Promise.race([
+                    response.text(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('body read timeout')), 10000)),
+                ]);
                 const is200 = response.status === 200;
                 const is404WithNoText = response.status === 404 && 
                     responseText.includes("There is currently no text in this page");
