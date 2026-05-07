@@ -282,13 +282,20 @@ function checkDeletedWikis() {
 }
 
 /**
- * Wait for all queues to be idle
+ * Wait for all queues to be idle, with an overall timeout
  */
-async function waitForQueues() {
+async function waitForQueues(maxWaitMs = 25 * 60 * 1000) {
+    const startTime = Date.now();
     let lastSize = -1;
     let stableCount = 0;
     
     while (stableCount < 3) {
+        const elapsed = Date.now() - startTime;
+        if (elapsed > maxWaitMs) {
+            console.log(`⚠️ Queue wait timeout reached after ${Math.round(elapsed / 1000)}s - forcing exit`);
+            break;
+        }
+
         const currentSize = queues.many.size + queues.many.pending + 
                            queues.four.size + queues.four.pending + 
                            queues.one.size + queues.one.pending;
