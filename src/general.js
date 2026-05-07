@@ -24,13 +24,16 @@ const createTrackedQueue = (name, concurrency, jobTimeoutMs = 60000) => {
         
         const wrappedFn = async () => {
             jobs.set(jobId, { name: jobName, active: true });
+            let timeoutHandle;
             try {
                 return await Promise.race([
                     fn(),
-                    new Promise((_, reject) => setTimeout(
-                        () => reject(new Error(`Job timed out after ${jobTimeoutMs}ms`)),
-                        jobTimeoutMs
-                    )),
+                    new Promise((_, reject) => {
+                        timeoutHandle = setTimeout(
+                            () => reject(new Error(`Job timed out after ${jobTimeoutMs}ms`)),
+                            jobTimeoutMs
+                        );
+                    }),
                 ]);
             } catch (error) {
                 const message = error && error.message ? error.message : String(error);
@@ -41,6 +44,7 @@ const createTrackedQueue = (name, concurrency, jobTimeoutMs = 60000) => {
                 // Swallow job errors so one failed task does not crash the whole tidy run.
                 return undefined;
             } finally {
+                clearTimeout(timeoutHandle);
                 jobs.delete(jobId);
             }
         };
