@@ -4,7 +4,7 @@ import EventEmitter from 'node:events';
 const HEADERS = { 'User-Agent': 'Addshore Addbot wikibase.world' };
 
 // Create wrapper queues that track job names
-const createTrackedQueue = (name, concurrency) => {
+const createTrackedQueue = (name, concurrency, jobTimeoutMs = 60000) => {
     const queue = new PQueue({concurrency});
     const jobs = new Map(); // Track active and pending jobs
     
@@ -24,8 +24,17 @@ const createTrackedQueue = (name, concurrency) => {
         
         const wrappedFn = async () => {
             jobs.set(jobId, { name: jobName, active: true });
+            let timeoutHandle;
             try {
-                return await fn();
+                return await Promise.race([
+                    fn(),
+                    new Promise((_, reject) => {
+                        timeoutHandle = setTimeout(
+                            () => reject(new Error(`Job timed out after ${jobTimeoutMs}ms`)),
+                            jobTimeoutMs
+                        );
+                    }),
+                ]);
             } catch (error) {
                 const message = error && error.message ? error.message : String(error);
                 console.error(`❌ [${name}] Job failed: ${jobName} - ${message}`);
@@ -35,6 +44,7 @@ const createTrackedQueue = (name, concurrency) => {
                 // Swallow job errors so one failed task does not crash the whole tidy run.
                 return undefined;
             } finally {
+                clearTimeout(timeoutHandle);
                 jobs.delete(jobId);
             }
         };
@@ -56,9 +66,9 @@ const queues = {
     // many: parallel network fetches (no rate limit concerns)
     // four: parallel processing with some API calls (rate limit aware)
     // one: serialized Wikibase edits (API maxlag=30 enforces serialization)
-    many : createTrackedQueue('many', 32),
-    four : createTrackedQueue('four', 8),
-    one : createTrackedQueue('one', 1),
+    many : createTrackedQueue('many', 32, 60000),
+    four : createTrackedQueue('four', 8, 60000),
+    one  : createTrackedQueue('one', 1, 120000),
 }
 const ee = new EventEmitter();
 
