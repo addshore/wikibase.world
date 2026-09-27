@@ -1,0 +1,127 @@
+name: Rewrite Wiki Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: One sync operation to run for each selected wiki
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - software
+          - metrics
+          - hosting
+          - links
+          - cleanup
+          - activity
+      limit:
+        description: Maximum number of wikis to process (leave empty for all)
+        required: false
+        default: '25'
+        type: string
+      selection:
+        description: Choose which existing Wikibases to target
+        required: true
+        default: random
+        type: choice
+        options:
+          - all
+          - site-contains
+          - domain
+          - item-id
+          - random
+      match:
+        description: Site substring or hostname for the selected target mode
+        required: false
+        default: ''
+        type: string
+      item:
+        description: Wikibase World item ID when selection is item-id
+        required: false
+        default: ''
+        type: string
+      write:
+        description: Apply changes to Wikibase World (otherwise dry-run)
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wikibase-world-rewrite-sync
+  cancel-in-progress: false
+
+jobs:
+  rewrite-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Synchronize wikis
+        env:
+          TARGET_WIKIBASE_URL: https://wikibase.world
+          TARGET_WIKIBASE_USERNAME: ${{ secrets.WORLD_USERNAME }}
+          TARGET_WIKIBASE_PASSWORD: ${{ secrets.WORLD_PASSWORD }}
+          TARGET_WIKIBASE_BOT: 'true'
+          SYNC_ACTION: ${{ inputs.action }}
+          SYNC_SELECTION: ${{ inputs.selection }}
+          SYNC_MATCH: ${{ inputs.match }}
+          SYNC_ITEM: ${{ inputs.item }}
+          SYNC_LIMIT: ${{ inputs.limit }}
+          SYNC_WRITE: ${{ inputs.write }}
+        run: |
+          args=()
+          args+=("--action=$SYNC_ACTION")
+          case "$SYNC_SELECTION" in
+            all)
+              ;;
+            site-contains)
+              if [[ -z "$SYNC_MATCH" ]]; then
+                echo "Provide a site substring for site-contains selection." >&2
+                exit 1
+              fi
+              args+=("--filter=$SYNC_MATCH")
+              ;;
+            domain)
+              if [[ -z "$SYNC_MATCH" ]]; then
+                echo "Provide a hostname for domain selection." >&2
+                exit 1
+              fi
+              args+=("--domain=$SYNC_MATCH")
+              ;;
+            item-id)
+              if [[ -z "$SYNC_ITEM" ]]; then
+                echo "Provide an item ID for item-id selection." >&2
+                exit 1
+              fi
+              args+=("--item=$SYNC_ITEM")
+              ;;
+            random)
+              args+=("--random")
+              ;;
+            *)
+              echo "Unsupported selection: $SYNC_SELECTION" >&2
+              exit 1
+              ;;
+          esac
+          if [[ -n "$SYNC_LIMIT" ]]; then
+            args+=("--limit=$SYNC_LIMIT")
+          fi
+          if [[ "$SYNC_WRITE" == "true" ]]; then
+            args+=("--write")
+          fi
+          npm run sync:wikis -- "${args[@]}"

@@ -1,0 +1,125 @@
+name: Rewrite Wiki Import
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Discovery source to run
+        required: true
+        default: cloud
+        type: choice
+        options:
+          - cloud
+          - google
+          - miraheze
+          - url-list
+      limit:
+        description: Maximum candidates to process (leave empty for all)
+        required: false
+        default: '25'
+        type: string
+      filter:
+        description: Optional site URL substring filter
+        required: false
+        default: ''
+        type: string
+      urls:
+        description: For url-list, enter one site URL per line
+        required: false
+        default: ''
+        type: string
+      host:
+        description: Optional host item ID for url-list (for example Q8)
+        required: false
+        default: ''
+        type: string
+      write:
+        description: Apply changes to Wikibase World (otherwise dry-run)
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wikibase-world-rewrite-import
+  cancel-in-progress: false
+
+jobs:
+  rewrite-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Discover and import wikis
+        env:
+          TARGET_WIKIBASE_URL: https://wikibase.world
+          TARGET_WIKIBASE_USERNAME: ${{ secrets.WORLD_USERNAME }}
+          TARGET_WIKIBASE_PASSWORD: ${{ secrets.WORLD_PASSWORD }}
+          TARGET_WIKIBASE_BOT: 'true'
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          IMPORT_SOURCE: ${{ inputs.source }}
+          IMPORT_LIMIT: ${{ inputs.limit }}
+          IMPORT_FILTER: ${{ inputs.filter }}
+          IMPORT_URLS: ${{ inputs.urls }}
+          IMPORT_HOST: ${{ inputs.host }}
+          IMPORT_WRITE: ${{ inputs.write }}
+        run: |
+          args=()
+          if [[ -n "$IMPORT_LIMIT" ]]; then
+            args+=("--limit=$IMPORT_LIMIT")
+          fi
+          if [[ -n "$IMPORT_FILTER" ]]; then
+            args+=("--filter=$IMPORT_FILTER")
+          fi
+          if [[ "$IMPORT_WRITE" == "true" ]]; then
+            args+=("--write")
+          fi
+
+          case "$IMPORT_SOURCE" in
+            cloud)
+              npm run import:cloud -- "${args[@]}"
+              ;;
+            google)
+              npm run import:google -- "${args[@]}"
+              ;;
+            miraheze)
+              npm run import:miraheze -- "${args[@]}"
+              ;;
+            url-list)
+              if [[ -z "$IMPORT_URLS" ]]; then
+                echo "Provide at least one URL for the url-list source." >&2
+                exit 1
+              fi
+              if [[ -n "$IMPORT_HOST" ]]; then
+                args+=("--host=$IMPORT_HOST")
+              fi
+              url_count=0
+              while IFS= read -r url; do
+                if [[ -n "$url" ]]; then
+                  args+=("$url")
+                  url_count=$((url_count + 1))
+                fi
+              done <<< "$IMPORT_URLS"
+              if [[ "$url_count" -eq 0 ]]; then
+                echo "Provide at least one URL for the url-list source." >&2
+                exit 1
+              fi
+              npm run import:list -- "${args[@]}"
+              ;;
+            *)
+              echo "Unsupported source: $IMPORT_SOURCE" >&2
+              exit 1
+              ;;
+          esac
