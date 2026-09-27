@@ -10,14 +10,31 @@
     "wikibase-sdk": "^10.2.1"
   },
   "scripts": {
-    "test": "mocha test/*.test.js",
-    "lint": "eslint src cmd test --max-warnings=0"
+    "test": "mocha --exit test/*.test.js && tsx --test test/*.test.ts",
+    "lint": "eslint src cmd test --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "wikibase:up": "docker compose -p wikibase-world-local -f compose.wikibase.yml up -d",
+    "wikibase:down": "docker compose -p wikibase-world-local -f compose.wikibase.yml down",
+    "wikibase:reset": "docker compose -p wikibase-world-local -f compose.wikibase.yml down -v",
+    "import:cloud": "tsx src/rewrite/cli/import-cloud.ts",
+    "import:google": "tsx src/rewrite/cli/import-google.ts",
+    "import:miraheze": "tsx src/rewrite/cli/import-miraheze.ts",
+    "import:list": "tsx src/rewrite/cli/import-list.ts",
+    "sync:wikis": "tsx src/rewrite/cli/sync-wikis.ts",
+    "test:integration": "tsx --test test/integration/*.test.ts",
+    "wikibase:test:up": "docker compose -p wikibase-world-integration --env-file compose.wikibase.integration.env -f compose.wikibase.yml up -d",
+    "wikibase:test:down": "docker compose -p wikibase-world-integration --env-file compose.wikibase.integration.env -f compose.wikibase.yml down",
+    "wikibase:test:reset": "docker compose -p wikibase-world-integration --env-file compose.wikibase.integration.env -f compose.wikibase.yml down -v"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",
+    "@types/chai": "^5.2.3",
+    "@types/node": "^26.6.3",
     "chai": "^5.2.0",
     "eslint": "^9.30.0",
     "globals": "^16.2.0",
-    "mocha": "^11.7.1"
+    "mocha": "^12.0.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
   }
 }

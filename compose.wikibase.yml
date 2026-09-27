@@ -1,0 +1,60 @@
+services:
+  database:
+    image: mariadb:10.11
+    environment:
+      MARIADB_DATABASE: wikibase
+      MARIADB_USER: wikibase
+      MARIADB_PASSWORD: wikibase-local-only
+      MARIADB_ROOT_PASSWORD: root-local-only
+    volumes:
+      - wikibase-database:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  wikibase:
+    image: wikibase/wikibase:mw1.43.9
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "${WIKIBASE_PORT:-8080}:80"
+    environment:
+      DB_SERVER: database:3306
+      DB_USER: wikibase
+      DB_PASS: wikibase-local-only
+      DB_NAME: wikibase
+      MW_ADMIN_NAME: Admin
+      MW_ADMIN_PASS: wikibase-local-only
+      MW_ADMIN_EMAIL: admin@example.test
+      MW_WG_SERVER: http://localhost:${WIKIBASE_PORT:-8080}
+      MW_WG_SITENAME: Local Wikibase integration test
+      METADATA_CALLBACK: "false"
+    volumes:
+      - wikibase-config:/config
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          php -r '$$response = @file_get_contents("http://127.0.0.1/api.php?action=query&meta=siteinfo&format=json");
+          exit($$response === false ? 1 : 0);'
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 60s
+
+  jobrunner:
+    image: wikibase/wikibase:mw1.43.9
+    command: ["/jobrunner-entrypoint.sh"]
+    depends_on:
+      wikibase:
+        condition: service_healthy
+    volumes:
+      - wikibase-config:/config
+    restart: unless-stopped
+
+volumes:
+  wikibase-database:
+  wikibase-config:
